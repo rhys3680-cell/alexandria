@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline as streamPipeline } from 'node:stream/promises';
-import { resolveCommand, run } from '../proc.js';
+import { resolveCommand, run, type ResolvedCommand } from '../proc.js';
 
 export const WHISPER_MODELS = ['tiny', 'base', 'small', 'medium', 'large-v3-turbo'] as const;
 export type WhisperModel = (typeof WHISPER_MODELS)[number];
@@ -15,6 +15,25 @@ export const MODEL_SIZES: Record<WhisperModel, string> = {
   medium: '~1.5 GB',
   'large-v3-turbo': '~1.6 GB',
 };
+
+/**
+ * Measured on a 20-second Korean memo, against a known transcript.
+ *
+ * `base` transcribed English word for word but made six errors in Korean,
+ * including the speaker's name and the product name — and a wrong name flows
+ * straight into the item's `people` field, where nothing downstream can catch
+ * it. `small` fixed both at roughly 2.4x the runtime, which is why it is the
+ * default: wrong data is worse than slow data.
+ */
+export const MODEL_NOTES: Partial<Record<WhisperModel, string>> = {
+  tiny: '가장 빠름 · 비영어권에는 권장하지 않음',
+  base: '영어 전용이면 충분 · 한국어 고유명사에서 오류',
+  small: '기본값 · 한국어 고유명사 정확, base 대비 약 2.4배 느림',
+  medium: '더 정확하지만 상당히 느림',
+  'large-v3-turbo': '최상 정확도 · 미측정',
+};
+
+export const DEFAULT_WHISPER_MODEL: WhisperModel = 'small';
 
 const MODEL_BASE_URL = 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main';
 const RELEASES_URL = 'https://api.github.com/repos/ggml-org/whisper.cpp/releases/latest';
@@ -98,12 +117,11 @@ export async function ensureWhisperBinary(vendorDir: string, onProgress?: Downlo
     };
   }
 
-  const archive = path.join(vendorDir, 'whisper', path.basename(asset.name));
-  await downloadFile(asset.url, archive, onProgress);
+  const archive = path.join(binDir, path.basename(asset.name));
+  // A previous run may have downloaded it and failed only at extraction.
+  if (!fs.existsSync(archive)) await downloadFile(asset.url, archive, onProgress);
 
-  // bsdtar ships with Windows 10+ and reads zip archives, so no unzip
-  // dependency is needed.
-  const tar = resolveCommand('tar');
+  const tar = resolveArchiver();
   if (!tar) {
     return { path: '', instructions: `압축을 풀 수 없습니다. 직접 해제하세요: ${archive}` };
   }
@@ -120,6 +138,20 @@ export async function ensureWhisperBinary(vendorDir: string, onProgress?: Downlo
     return { path: '', instructions: `압축은 풀렸지만 whisper-cli 실행 파일을 찾지 못했습니다: ${binDir}` };
   }
   return { path: installed };
+}
+
+/**
+ * Windows ships bsdtar at System32, which reads zip archives and understands
+ * drive letters. It must be addressed by full path rather than through PATH:
+ * inside a Git Bash environment `tar` resolves to GNU tar, which reads `C:\...`
+ * as a remote host ("Cannot connect to C") and cannot open a zip at all.
+ */
+function resolveArchiver(): ResolvedCommand | null {
+  if (process.platform === 'win32') {
+    const bsdtar = path.join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'tar.exe');
+    if (fs.existsSync(bsdtar)) return { file: bsdtar, prefixArgs: [] };
+  }
+  return resolveCommand('tar');
 }
 
 async function findWindowsAsset(): Promise<{ name: string; url: string } | undefined> {
@@ -147,25 +179,34 @@ export function findWhisperBinary(root: string): string | undefined {
   const names =
     process.platform === 'win32' ? ['whisper-cli.exe', 'main.exe'] : ['whisper-cli', 'main'];
 
-  const search = (dir: string, depth: number): string | undefined => {
-    if (depth > 4 || !fs.existsSync(dir)) return undefined;
-    let entries: fs.Dirent[];
-    try {
-      entries = fs.readdirSync(dir, { withFileTypes: true });
-    } catch {
-      return undefined;
-    }
-    for (const entry of entries) {
-      if (entry.isFile() && names.includes(entry.name)) return path.join(dir, entry.name);
-    }
-    for (const entry of entries) {
-      if (entry.isDirectory()) {
-        const found = search(path.join(dir, entry.name), depth + 1);
-        if (found) return found;
-      }
-    }
-    return undefined;
-  };
+  // One full pass per name, so preference order beats directory order. Current
+  // releases ship both binaries side by side and `main` sorts first, which is
+  // exactly the case a single pass would get wrong.
+  for (const name of names) {
+    const found = findFileNamed(root, name, 0);
+    if (found) return found;
+  }
+  return undefined;
+}
 
-  return search(root, 0);
+function findFileNamed(dir: string, name: string, depth: number): string | undefined {
+  if (depth > 4 || !fs.existsSync(dir)) return undefined;
+
+  let entries: fs.Dirent[];
+  try {
+    entries = fs.readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return undefined;
+  }
+
+  for (const entry of entries) {
+    if (entry.isFile() && entry.name === name) return path.join(dir, entry.name);
+  }
+  for (const entry of entries) {
+    if (entry.isDirectory()) {
+      const found = findFileNamed(path.join(dir, entry.name), name, depth + 1);
+      if (found) return found;
+    }
+  }
+  return undefined;
 }
