@@ -14,6 +14,7 @@ import {
   enqueueJob,
   extractJsonObject,
   failJob,
+  findWhisperBinary,
   fuseRanks,
   listItems,
   loadEmbeddings,
@@ -84,6 +85,25 @@ test('the organizer reply parser tolerates fences and surrounding prose', () => 
   assert.equal(extractJsonObject('```json\n{"a":1}\n```'), '{"a":1}');
   assert.equal(extractJsonObject('Sure! {"a":1} hope that helps'), '{"a":1}');
   assert.equal(extractJsonObject('no json here'), undefined);
+});
+
+test('the whisper binary is chosen by preference, not by directory order', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'alexandria-bin-'));
+  const release = path.join(root, 'Release');
+  fs.mkdirSync(release);
+
+  const suffix = process.platform === 'win32' ? '.exe' : '';
+  // Current releases ship both, and 'main' sorts first -- a single directory
+  // pass would pick the legacy binary.
+  fs.writeFileSync(path.join(release, `main${suffix}`), '');
+  fs.writeFileSync(path.join(release, `whisper-cli${suffix}`), '');
+
+  assert.equal(path.basename(findWhisperBinary(root)), `whisper-cli${suffix}`);
+
+  fs.rmSync(path.join(release, `whisper-cli${suffix}`));
+  assert.equal(path.basename(findWhisperBinary(root)), `main${suffix}`, '없으면 예전 이름으로 내려간다');
+
+  fs.rmSync(root, { recursive: true, force: true });
 });
 
 test('whisper output becomes text plus timed segments', () => {
