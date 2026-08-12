@@ -5,8 +5,10 @@ import { Command } from 'commander';
 import { watch } from 'chokidar';
 import {
   Alexandria,
+  DEFAULT_WHISPER_MODEL,
   defaultVaultDir,
   describeError,
+  MODEL_NOTES,
   ensureModel,
   ensureWhisperBinary,
   findWhisperBinary,
@@ -439,8 +441,17 @@ const setup = program.command('setup').description('의존 도구를 설치합�
 setup
   .command('whisper')
   .description('whisper.cpp 실행 파일과 모델을 내려받습니다')
-  .option('-m, --model <name>', `모델 (${WHISPER_MODELS.join(', ')})`, 'base')
-  .action(async (options: { model: string }) => {
+  .option('-m, --model <name>', `모델 (${WHISPER_MODELS.join(', ')})`, DEFAULT_WHISPER_MODEL)
+  .option('--list', '고를 수 있는 모델을 보여줍니다')
+  .action(async (options: { model: string; list?: boolean }) => {
+    if (options.list) {
+      for (const name of WHISPER_MODELS) {
+        const marker = name === DEFAULT_WHISPER_MODEL ? color.green(' ←기본') : '';
+        console.log(`  ${name.padEnd(16)} ${MODEL_SIZES[name].padStart(8)}  ${color.dim(MODEL_NOTES[name] ?? '')}${marker}`);
+      }
+      return;
+    }
+
     const model = options.model as WhisperModel;
     if (!WHISPER_MODELS.includes(model)) {
       console.error(color.red(`알 수 없는 모델: ${model}. 가능한 값: ${WHISPER_MODELS.join(', ')}`));
