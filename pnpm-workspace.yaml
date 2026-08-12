@@ -2,7 +2,13 @@ packages:
   - 'packages/*'
   - 'apps/*'
 
-# Both need their install script to fetch a platform binary.
 allowBuilds:
+  # Each of these needs its install script to fetch or place a platform binary.
   esbuild: true
   electron: true
+  onnxruntime-node: true
+  # Pulled in by transformers.js for image pipelines, which this project never
+  # uses, but the module is imported eagerly so its binaries must be present.
+  sharp: true
+  # Only needed by the protobufjs CLI, which we do not run.
+  protobufjs: false

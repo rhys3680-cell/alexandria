@@ -24,6 +24,8 @@ export interface SearchHit {
   item: Item;
   snippet: string;
   score: number;
+  /** Which index produced the hit, so the UI can explain a non-obvious match. */
+  via?: 'lexical' | 'semantic' | 'both';
 }
 
 const ITEM_COLUMNS = `id, path, created, updated, source, source_ref, status, lang, kind, title,
@@ -93,8 +95,64 @@ export function removeItem(db: Database, id: string): void {
     db.prepare('delete from items where id = ?').run(id);
     db.prepare('delete from items_fts where id = ?').run(id);
     db.prepare('delete from items_tri where id = ?').run(id);
+    db.prepare('delete from embeddings where item_id = ?').run(id);
     db.prepare('delete from jobs where item_id = ?').run(id);
   });
+}
+
+// ------------------------------------------------------------------ vectors
+
+export interface StoredEmbedding {
+  id: string;
+  vector: Float32Array;
+}
+
+export function upsertEmbedding(db: Database, itemId: string, model: string, vector: Float32Array): void {
+  db.prepare(
+    `insert into embeddings (item_id, model, dims, vector, updated) values (?,?,?,?,?)
+     on conflict(item_id) do update set
+       model = excluded.model, dims = excluded.dims,
+       vector = excluded.vector, updated = excluded.updated`,
+  ).run(
+    itemId,
+    model,
+    vector.length,
+    // A copy, because the view may be a slice of a larger buffer.
+    new Uint8Array(vector.buffer.slice(vector.byteOffset, vector.byteOffset + vector.byteLength)),
+    new Date().toISOString(),
+  );
+}
+
+export function loadEmbeddings(db: Database, model: string): StoredEmbedding[] {
+  const rows = db.prepare('select item_id, vector from embeddings where model = ?').all(model);
+  return rows.map((raw) => {
+    const row = raw as { item_id: string; vector: Uint8Array };
+    const bytes = row.vector;
+    return {
+      id: row.item_id,
+      vector: new Float32Array(bytes.buffer, bytes.byteOffset, bytes.byteLength / 4),
+    };
+  });
+}
+
+/** Organized items that have no current-model vector yet. */
+export function itemsMissingEmbedding(db: Database, model: string, limit = 500): string[] {
+  const rows = db
+    .prepare(
+      `select i.id as id from items i
+       left join embeddings e on e.item_id = i.id and e.model = ?
+       where i.status = 'organized' and e.item_id is null
+       order by i.created desc limit ?`,
+    )
+    .all(model, limit);
+  return rows.map((row) => String((row as { id: unknown }).id));
+}
+
+export function embeddingCount(db: Database, model: string): number {
+  const row = db.prepare('select count(*) as n from embeddings where model = ?').get(model) as
+    | { n?: number }
+    | undefined;
+  return Number(row?.n ?? 0);
 }
 
 export function getItem(db: Database, id: string): Item | undefined {

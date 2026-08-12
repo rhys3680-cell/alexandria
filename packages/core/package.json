@@ -21,6 +21,7 @@
     "test": "node --test \"test/*.test.mjs\""
   },
   "dependencies": {
+    "@huggingface/transformers": "^4.2.0",
     "yaml": "^2.9.0",
     "zod": "^4.4.3"
   },

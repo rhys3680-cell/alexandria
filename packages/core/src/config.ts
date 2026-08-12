@@ -38,11 +38,24 @@ export interface IngestConfig {
   audioExtensions: string[];
 }
 
+export interface SearchConfig {
+  /**
+   * Whether items get an embedding. Off until `alx setup embeddings` has
+   * downloaded the model, so a fresh install never blocks on a large download.
+   */
+  semantic: boolean;
+  /** A multilingual model is required: the vault mixes languages by design. */
+  model: string;
+  /** How much of an item is fed to the embedder. */
+  maxChars: number;
+}
+
 export interface AlexandriaConfig {
   vaultDir: string;
   llm: LlmConfig;
   stt: SttConfig;
   ingest: IngestConfig;
+  search: SearchConfig;
 }
 
 export const CONFIG_DIRNAME = '.alexandria';
@@ -69,7 +82,17 @@ export function defaultConfig(vaultDir = defaultVaultDir()): AlexandriaConfig {
       textExtensions: ['.md', '.txt', '.markdown'],
       audioExtensions: ['.wav', '.mp3', '.m4a', '.ogg', '.flac', '.webm', '.mp4'],
     },
+    search: {
+      semantic: false,
+      model: process.env.ALEXANDRIA_EMBED_MODEL ?? 'Xenova/multilingual-e5-base',
+      maxChars: 1500,
+    },
   };
+}
+
+/** Where downloaded models and binaries live, inside the vault. */
+export function vendorDir(vaultDir: string): string {
+  return path.join(vaultDir, CONFIG_DIRNAME, 'vendor');
 }
 
 export function configPath(vaultDir: string): string {
@@ -97,6 +120,7 @@ export function loadConfig(vaultDir = defaultVaultDir()): AlexandriaConfig {
     llm: { ...base.llm, ...partial.llm },
     stt: { ...base.stt, ...partial.stt },
     ingest: { ...base.ingest, ...partial.ingest },
+    search: { ...base.search, ...partial.search },
   };
 }
 

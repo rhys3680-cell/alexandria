@@ -10,6 +10,8 @@ export * from './llm/organizer.js';
 export * from './logger.js';
 export * from './pipeline.js';
 export * from './proc.js';
+export * from './search/embedder.js';
+export * from './search/hybrid.js';
 export * from './store.js';
 export * from './stt/setup.js';
 export * from './stt/whisper.js';

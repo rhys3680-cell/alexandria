@@ -69,6 +69,18 @@ const MIGRATIONS: string[] = [
   );
   create index jobs_state_idx on jobs (state, id);
   `,
+
+  // 2 — semantic search vectors
+  `
+  create table embeddings (
+    item_id text primary key,
+    model   text not null,
+    dims    integer not null,
+    vector  blob not null,
+    updated text not null
+  );
+  create index embeddings_model_idx on embeddings (model);
+  `,
 ];
 
 export function databasePath(vaultRoot: string): string {

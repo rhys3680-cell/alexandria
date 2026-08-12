@@ -1,6 +1,6 @@
 import type { Database } from './db.js';
 
-export type JobType = 'transcribe' | 'organize';
+export type JobType = 'transcribe' | 'organize' | 'embed';
 export type JobState = 'pending' | 'running' | 'done' | 'failed';
 
 export interface Job {
