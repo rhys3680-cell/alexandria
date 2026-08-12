@@ -24,6 +24,45 @@ export function rankBySimilarity(
     .slice(0, limit);
 }
 
+/** How many standard deviations above an item's own baseline counts as related. */
+export const NEIGHBOUR_Z = 1.5;
+
+/** Below this many candidates the baseline is not meaningful. */
+export const MIN_BASELINE = 5;
+
+/**
+ * Neighbours that genuinely stand out, rather than the top N of everything.
+ *
+ * An absolute cosine cut-off cannot work here. Measured across five mutually
+ * unrelated notes, every pair scored between 0.739 and 0.815 — the embedding
+ * space is anisotropic, so nothing is ever far from anything. Mean-centering
+ * widened the spread but did not fix the ordering, because there was no signal
+ * to recover: the honest answer for an unrelated corpus is "nothing related".
+ *
+ * So the test is relative to each item's own distribution. A note is related
+ * only if it sits well above how similar this item is to the vault in general,
+ * which self-calibrates to any model and returns nothing when nothing fits.
+ */
+export function significantNeighbours(
+  candidates: StoredEmbedding[],
+  vector: Float32Array,
+  limit: number,
+  z = NEIGHBOUR_Z,
+): Scored[] {
+  if (candidates.length < MIN_BASELINE) return [];
+
+  const scored = candidates.map((entry) => ({ id: entry.id, score: cosine(vector, entry.vector) }));
+  const mean = scored.reduce((sum, entry) => sum + entry.score, 0) / scored.length;
+  const variance = scored.reduce((sum, entry) => sum + (entry.score - mean) ** 2, 0) / scored.length;
+  const sd = Math.sqrt(variance);
+  if (sd === 0) return [];
+
+  return scored
+    .filter((entry) => entry.score >= mean + z * sd)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit);
+}
+
 export const RRF_K = 60;
 
 /**

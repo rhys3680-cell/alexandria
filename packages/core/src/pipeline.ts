@@ -19,7 +19,7 @@ import { organize } from './llm/organizer.js';
 import type { LlmAdapter } from './llm/adapter.js';
 import { createLogger, silentLogger, type Logger } from './logger.js';
 import { embeddingText, TransformersEmbedder, type Embedder } from './search/embedder.js';
-import { fuseRanks, rankBySimilarity } from './search/hybrid.js';
+import { fuseRanks, rankBySimilarity, significantNeighbours } from './search/hybrid.js';
 import { formatTranscript, WhisperCppTranscriber, type Transcriber } from './stt/whisper.js';
 import * as store from './store.js';
 import type { Item, ItemSource, ItemTask } from './types.js';
@@ -64,6 +64,15 @@ export interface AlexandriaDeps {
 }
 
 export type SearchMode = 'auto' | 'lexical' | 'semantic';
+
+export interface RelatedHit {
+  item: Item;
+  score: number;
+  /** Which signal connected the two items. */
+  via: 'shared' | 'semantic' | 'both';
+  /** Tags, keywords or people both items carry. Empty for a purely semantic link. */
+  shared: string[];
+}
 
 /**
  * The whole pipeline, usable from anywhere: the CLI drives it directly, the
@@ -366,6 +375,55 @@ export class Alexandria {
         snippet: snippets.get(fused.id) ?? item.summary ?? '',
         score: fused.score,
         via: both ? 'both' : inLexical.has(fused.id) ? 'lexical' : 'semantic',
+      });
+    }
+    return hits;
+  }
+
+  /**
+   * Past records connected to this one.
+   *
+   * Two independent signals, fused the same way search is: shared facets, which
+   * are exact and explainable, and vector neighbours, which catch a connection
+   * nobody thought to tag. Synchronous because the source item's vector is
+   * already stored — nothing needs to be embedded at read time.
+   */
+  related(id: string, limit = 5): RelatedHit[] {
+    const source = store.getItem(this.db, id);
+    if (!source) return [];
+
+    const pool = limit * 3;
+    const facetMatches = store.relatedByFacets(this.db, source, pool);
+    const sharedById = new Map(facetMatches.map((match) => [match.id, match.shared]));
+
+    let semanticIds: string[] = [];
+    if (this.config.search.semantic) {
+      const embeddings = store.loadEmbeddings(this.db, this.config.search.model);
+      const own = embeddings.find((entry) => entry.id === id);
+      if (own) {
+        // Only neighbours that stand out from this item's own baseline: a plain
+        // top-N would return the whole vault and train the reader to ignore it.
+        semanticIds = significantNeighbours(
+          embeddings.filter((entry) => entry.id !== id),
+          own.vector,
+          pool,
+        ).map((entry) => entry.id);
+      }
+    }
+
+    const hits: RelatedHit[] = [];
+    for (const fused of fuseRanks([facetMatches.map((match) => match.id), semanticIds])) {
+      if (hits.length >= limit) break;
+      const item = store.getItem(this.db, fused.id);
+      if (!item) continue;
+
+      const shared = sharedById.get(fused.id) ?? [];
+      const bySemantic = semanticIds.includes(fused.id);
+      hits.push({
+        item,
+        score: fused.score,
+        shared,
+        via: shared.length && bySemantic ? 'both' : shared.length ? 'shared' : 'semantic',
       });
     }
     return hits;

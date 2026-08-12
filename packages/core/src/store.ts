@@ -100,6 +100,46 @@ export function removeItem(db: Database, id: string): void {
   });
 }
 
+export interface FacetMatch {
+  id: string;
+  /** The tag, keyword or person shared with the source item. */
+  shared: string[];
+}
+
+/**
+ * Items that share a tag, keyword or named person with `item`.
+ *
+ * This is the half of "related" that works with semantic search switched off,
+ * and it is the half that can explain itself: the overlapping labels are
+ * returned so the UI can say why two notes are connected.
+ */
+export function relatedByFacets(db: Database, item: Item, limit = 20): FacetMatch[] {
+  const facets = [...new Set([...item.tags, ...item.keywords, ...item.people])].filter(Boolean);
+  if (!facets.length) return [];
+
+  const placeholders = facets.map(() => '?').join(',');
+  const branch = (column: string) =>
+    `select i.id as id, j.value as value from items i, json_each(i.${column}) j
+       where j.value in (${placeholders}) and i.id <> ?`;
+
+  const rows = db
+    .prepare([branch('tags'), branch('keywords'), branch('people')].join(' union all '))
+    .all(...facets, item.id, ...facets, item.id, ...facets, item.id);
+
+  const shared = new Map<string, Set<string>>();
+  for (const raw of rows) {
+    const row = raw as { id: string; value: string };
+    const bucket = shared.get(row.id) ?? new Set<string>();
+    bucket.add(row.value);
+    shared.set(row.id, bucket);
+  }
+
+  return [...shared.entries()]
+    .map(([id, values]) => ({ id, shared: [...values] }))
+    .sort((a, b) => b.shared.length - a.shared.length)
+    .slice(0, limit);
+}
+
 // ------------------------------------------------------------------ vectors
 
 export interface StoredEmbedding {
