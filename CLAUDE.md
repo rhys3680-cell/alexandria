@@ -1,0 +1,52 @@
+# Alexandria
+
+글과 음성을 알아서 정리하고, 찾아주고, 먼저 보여주는 개인용 데스크톱 앱. 전체 설명은 [README.md](./README.md).
+
+```
+packages/core     수집·전사·정리·색인. Electron 의존성 없음
+packages/cli      alx — 코어를 그대로 사용
+apps/desktop      Electron + React
+```
+
+## 명령
+
+```bash
+pnpm build        # 전체 빌드 (pnpm -r build)
+pnpm typecheck
+pnpm test         # 코어 테스트. dist 를 대상으로 하므로 build 후 실행
+pnpm alx <args>   # CLI
+pnpm desktop      # Electron 개발 실행
+```
+
+## 커밋 규칙
+
+**Conventional Commits + scope**, 제목은 **영어**.
+
+```
+<type>(<scope>): <subject>
+
+<body — 선택>
+
+Co-Authored-By: ...
+```
+
+- **type** — `feat` `fix` `refactor` `perf` `test` `docs` `chore` `build`
+- **scope** — `core` `cli` `desktop`. 저장소 전체에 걸치면 생략
+- **subject** — 영어 명령형 현재시제, 72자 이내, 끝에 마침표 없음
+  - `feat(core): add file-backed vault with SQLite index`
+  - `fix(cli): resolve the claude binary instead of the npm shim on Windows`
+- **body** — 필요할 때만. *무엇을* 했는지는 diff 가 말하므로 **왜** 그렇게 했는지를 적는다
+- **Co-Authored-By** 트레일러를 남긴다
+
+### 이 저장소의 추가 규칙
+
+- **기능 단위로 커밋한다.** 한 커밋은 하나의 완결된 변경이고, 그 시점에서 빌드가 통과해야 한다
+- **측정으로 정한 것은 수치를 본문에 남긴다.** 이 프로젝트의 핵심 결정들(툴 스키마 제거, `--effort low`, `node:sqlite` 채택)은 전부 실측 근거가 있고, 그 숫자가 없으면 나중에 되돌릴 근거도 사라진다
+- 커밋과 푸시는 요청받았을 때만 한다
+
+## 설계상 지켜야 할 것
+
+- **보관소가 진실의 원천이다.** 마크다운 파일이 원본이고 SQLite 는 언제든 `alx reindex` 로 재생성되는 파생물. 색인에만 존재하는 상태를 만들지 않는다
+- **네이티브 모듈을 추가하지 않는다.** 색인은 내장 `node:sqlite`, 전사와 LLM 호출은 자식 프로세스. Electron 용 재빌드가 필요한 의존성이 들어오면 이 성질이 깨진다
+- **정리 호출은 툴 없는 에이전트로 보낸다.** `--agents '{...,"tools":[]}'` + `--agent` + `--effort low`. 이 조합을 벗어나면 호출당 비용이 100배까지 뛴다
+- **원문 언어를 보존한다.** 제목·요약·태그는 원문 언어 그대로, `keywords` 만 영어. 교차 언어 검색이 여기에 의존한다
