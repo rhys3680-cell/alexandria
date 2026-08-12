@@ -1,4 +1,4 @@
-import type { Briefing, BriefingTask, Item } from '@alexandria/core';
+import type { Briefing, BriefingTask, Item, RelatedHit } from '@alexandria/core';
 
 const enabled = process.stdout.isTTY === true && !process.env.NO_COLOR;
 
@@ -136,6 +136,21 @@ function formatTask(task: BriefingTask): string {
   const due = task.due ? color.dim(` ${task.due}`) : '';
   const owner = task.owner ? color.dim(` @${task.owner}`) : '';
   return `  ${reference}  ${task.text}${due}${owner}\n      ${color.dim(`↳ ${task.itemTitle}`)}`;
+}
+
+export function formatRelated(hits: RelatedHit[]): string {
+  if (!hits.length) return color.dim('  관련 기록 없음');
+
+  return hits
+    .map((hit) => {
+      const badge =
+        hit.via === 'both' ? color.green('둘다') : hit.via === 'semantic' ? color.magenta('의미') : color.dim('공유');
+      const reason = hit.shared.length
+        ? color.dim(`      ↳ 공유: ${hit.shared.slice(0, 5).join(', ')}`)
+        : color.dim('      ↳ 내용이 비슷함');
+      return `  ${badge} ${formatItemLine(hit.item)}\n${reason}`;
+    })
+    .join('\n');
 }
 
 export function firstLine(text: string): string {

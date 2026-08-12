@@ -31,6 +31,7 @@ import {
   formatBytes,
   formatItemDetail,
   formatItemLine,
+  formatRelated,
   progressLine,
 } from './ui.js';
 
@@ -278,7 +279,8 @@ program
 program
   .command('show <id>')
   .description('항목 하나를 자세히 봅니다 (전체 ID 또는 뒤 6자리)')
-  .action(async (id: string) => {
+  .option('--no-related', '관련 기록을 생략합니다')
+  .action(async (id: string, options: { related: boolean }) => {
     await withVault((alx) => {
       const item = resolveItem(alx, id);
       if (!item) {
@@ -287,6 +289,33 @@ program
         return;
       }
       console.log(formatItemDetail(item));
+      if (options.related) {
+        console.log(`\n${color.bold('관련 기록')}`);
+        console.log(formatRelated(alx.related(item.id)));
+      }
+    });
+  });
+
+program
+  .command('related <id>')
+  .description('이 항목과 이어지는 과거 기록을 찾습니다')
+  .option('-n, --limit <count>', '개수', (value) => Number.parseInt(value, 10), 5)
+  .option('--json', 'JSON 으로 출력')
+  .action(async (id: string, options: { limit: number; json?: boolean }) => {
+    await withVault((alx) => {
+      const item = resolveItem(alx, id);
+      if (!item) {
+        console.error(color.red(`항목을 찾을 수 없습니다: ${id}`));
+        process.exitCode = 1;
+        return;
+      }
+      const hits = alx.related(item.id, options.limit);
+      if (options.json) {
+        console.log(JSON.stringify(hits, null, 2));
+        return;
+      }
+      console.log(color.dim(`${item.title ?? item.id} 와(과) 이어지는 기록\n`));
+      console.log(formatRelated(hits));
     });
   });
 
