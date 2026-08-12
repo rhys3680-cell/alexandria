@@ -10,13 +10,18 @@ import {
   ensureModel,
   ensureWhisperBinary,
   findWhisperBinary,
+  KNOWN_MODELS,
   loadConfig,
   MODEL_SIZES,
   retryFailedJobs,
   saveConfig,
+  TransformersEmbedder,
+  vendorDir,
   WHISPER_MODELS,
   type Item,
   type PipelineEvent,
+  type SearchHit,
+  type SearchMode,
   type WhisperModel,
 } from '@alexandria/core';
 import {
@@ -240,26 +245,35 @@ program
 
 program
   .command('search <query...>')
-  .description('제목·요약·태그·본문을 검색합니다')
+  .description('어휘·의미 검색을 함께 사용해 찾습니다')
   .option('-n, --limit <count>', '개수', (value) => Number.parseInt(value, 10), 20)
+  .option('--lexical', '어휘 검색만 사용')
+  .option('--semantic', '의미 검색만 사용')
   .option('--json', 'JSON 으로 출력')
-  .action(async (queryParts: string[], options: { limit: number; json?: boolean }) => {
-    await withVault((alx) => {
-      const hits = alx.search(queryParts.join(' '), options.limit);
-      if (options.json) {
-        console.log(JSON.stringify(hits, null, 2));
-        return;
-      }
-      if (!hits.length) {
-        console.log(color.dim('결과가 없습니다.'));
-        return;
-      }
-      for (const hit of hits) {
-        console.log(formatItemLine(hit.item));
-        if (hit.snippet) console.log(`    ${color.dim(hit.snippet.replace(/\s+/g, ' '))}`);
-      }
-    });
-  });
+  .action(
+    async (
+      queryParts: string[],
+      options: { limit: number; lexical?: boolean; semantic?: boolean; json?: boolean },
+    ) => {
+      await withVault(async (alx) => {
+        const mode: SearchMode = options.lexical ? 'lexical' : options.semantic ? 'semantic' : 'auto';
+        const hits = await alx.search(queryParts.join(' '), options.limit, mode);
+
+        if (options.json) {
+          console.log(JSON.stringify(hits, null, 2));
+          return;
+        }
+        if (!hits.length) {
+          console.log(color.dim('결과가 없습니다.'));
+          return;
+        }
+        for (const hit of hits) {
+          console.log(`${searchBadge(hit.via)} ${formatItemLine(hit.item)}`);
+          if (hit.snippet) console.log(`       ${color.dim(hit.snippet.replace(/\s+/g, ' '))}`);
+        }
+      });
+    },
+  );
 
 program
   .command('show <id>')
@@ -346,6 +360,9 @@ program
         console.log(`  ${status.padEnd(14)} ${count}`);
       }
       console.log(`${color.bold('대기 작업')}  ${stats.pending}건`);
+      console.log(
+        `${color.bold('의미 검색')}  ${stats.semantic ? `켜짐 · 벡터 ${stats.embedded}건` : color.dim('꺼짐')}`,
+      );
       console.log(`${color.bold('정리 비용 환산 누계')}  $${stats.totalCostUsd.toFixed(4)}`);
       console.log(color.dim('  구독 로그인 상태라면 실제 청구가 아니라 사용량 한도 소모량의 환산치입니다.'));
 
@@ -431,6 +448,70 @@ setup
     console.log(color.dim('\n설정에 저장했습니다. `alx doctor` 로 확인하세요.'));
   });
 
+setup
+  .command('embeddings')
+  .description('의미 검색용 임베딩 모델을 내려받고 켭니다')
+  .option('-m, --model <name>', '모델 이름')
+  .option('--list', '고를 수 있는 모델을 보여줍니다')
+  .action(async (options: { model?: string; list?: boolean }) => {
+    if (options.list) {
+      for (const [name, info] of Object.entries(KNOWN_MODELS)) {
+        console.log(`  ${name.padEnd(34)} ${info.download.padStart(8)}  ${info.dims}d  ${color.dim(info.note)}`);
+      }
+      console.log(color.dim('\n  모델을 바꾸면 기존 벡터는 무시되고 자동으로 다시 임베딩합니다.'));
+      return;
+    }
+
+    const config = loadConfig(vaultOption());
+    if (options.model) config.search.model = options.model;
+    config.search.semantic = true;
+
+    console.log(color.cyan(`임베딩 모델 '${config.search.model}' 준비 중...`));
+    const embedder = new TransformersEmbedder(config.search, vendorDir(config.vaultDir), (progress) => {
+      if (progress.total) {
+        progressLine(`  ${progress.file}  ${formatBytes(progress.loaded ?? 0)} / ${formatBytes(progress.total)}`);
+      }
+    });
+
+    const problem = await embedder.check();
+    endProgressLine();
+    if (problem) {
+      console.error(color.red(problem));
+      process.exitCode = 1;
+      return;
+    }
+    console.log(color.green('모델 준비 완료'));
+
+    // Saved before opening the vault so the pipeline sees semantic search on.
+    saveConfig(config);
+
+    await withVault(async (alx) => {
+      const queued = alx.embedMissing();
+      if (!queued) {
+        console.log(color.dim('임베딩할 기존 항목이 없습니다.'));
+        return;
+      }
+      console.log(color.dim(`기존 항목 ${queued}건을 임베딩합니다.`));
+      await runQueue(alx, {});
+    });
+  });
+
+program
+  .command('embed')
+  .description('아직 임베딩이 없는 항목을 처리합니다')
+  .action(async () => {
+    await withVault(async (alx) => {
+      if (!alx.config.search.semantic) {
+        console.error(color.red('의미 검색이 꺼져 있습니다. `alx setup embeddings` 를 먼저 실행하세요.'));
+        process.exitCode = 1;
+        return;
+      }
+      const queued = alx.embedMissing();
+      console.log(`${queued}건을 대기열에 넣었습니다.`);
+      if (queued) await runQueue(alx, {});
+    });
+  });
+
 // ----------------------------------------------------------------- config
 
 const configCommand = program.command('config').description('설정을 보거나 바꿉니다');
@@ -497,6 +578,13 @@ function reportEvent(event: PipelineEvent): void {
       );
       break;
   }
+}
+
+/** Shows which index found a result, since a semantic hit shares no words. */
+function searchBadge(via: SearchHit['via']): string {
+  if (via === 'semantic') return color.magenta('의미');
+  if (via === 'both') return color.green('둘다');
+  return color.dim('어휘');
 }
 
 async function printDoctor(alx: Alexandria): Promise<void> {
