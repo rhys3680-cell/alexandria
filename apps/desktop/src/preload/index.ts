@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'electron';
-import type { Briefing, Item, ListOptions, PipelineEvent, SearchHit } from '@alexandria/core';
+import type { Briefing, Item, ListOptions, PipelineEvent, RelatedHit, SearchHit } from '@alexandria/core';
 import { IPC, type AlexandriaApi, type DoctorCheck, type VaultStats } from '../shared/api.js';
 
 /**
@@ -18,6 +18,7 @@ const api: AlexandriaApi = {
   get: (id) => ipcRenderer.invoke(IPC.get, id) as Promise<Item | undefined>,
   remove: (id) => ipcRenderer.invoke(IPC.remove, id) as Promise<boolean>,
 
+  related: (id, limit) => ipcRenderer.invoke(IPC.related, id, limit) as Promise<RelatedHit[]>,
   briefing: (soonDays) => ipcRenderer.invoke(IPC.briefing, soonDays) as Promise<Briefing>,
   setTaskDone: (itemId, index, done) =>
     ipcRenderer.invoke(IPC.setTaskDone, itemId, index, done) as Promise<Item | undefined>,

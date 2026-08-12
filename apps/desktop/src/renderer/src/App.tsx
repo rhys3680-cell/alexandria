@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { Briefing, BriefingTask, Item, SearchHit } from '@alexandria/core';
+import type { Briefing, BriefingTask, Item, RelatedHit, SearchHit } from '@alexandria/core';
 import type { DoctorCheck, VaultStats } from '../../shared/api.js';
 
 const STATUS_LABEL: Record<string, string> = {
@@ -129,6 +129,7 @@ export function App(): React.JSX.Element {
           {selected ? (
             <ItemDetail
               item={selected}
+              onOpen={setSelectedId}
               onDeleted={async () => {
                 await window.alexandria.remove(selected.id);
                 setSelectedId(undefined);
@@ -452,7 +453,49 @@ function BriefingView({
   );
 }
 
-function ItemDetail({ item, onDeleted }: { item: Item; onDeleted: () => Promise<void> }): React.JSX.Element {
+function RelatedRecords({ itemId, onOpen }: { itemId: string; onOpen: (id: string) => void }): React.JSX.Element | null {
+  const [hits, setHits] = useState<RelatedHit[]>([]);
+
+  useEffect(() => {
+    let live = true;
+    setHits([]);
+    void window.alexandria.related(itemId, 5).then((found) => {
+      if (live) setHits(found);
+    });
+    return () => {
+      live = false;
+    };
+  }, [itemId]);
+
+  // Nothing related is a real answer, not an empty state worth showing.
+  if (!hits.length) return null;
+
+  return (
+    <section>
+      <h2>관련 기록</h2>
+      <ul className="mini-list">
+        {hits.map((hit) => (
+          <li key={hit.item.id} onClick={() => onOpen(hit.item.id)}>
+            <span className="mini-title">{hit.item.title ?? '(제목 없음)'}</span>
+            <span className="mini-sub">
+              {hit.shared.length ? `공유: ${hit.shared.slice(0, 5).join(', ')}` : '내용이 비슷함'}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function ItemDetail({
+  item,
+  onDeleted,
+  onOpen,
+}: {
+  item: Item;
+  onDeleted: () => Promise<void>;
+  onOpen: (id: string) => void;
+}): React.JSX.Element {
   return (
     <article className="detail">
       <h1>{item.title ?? '(정리 전)'}</h1>
@@ -500,6 +543,8 @@ function ItemDetail({ item, onDeleted }: { item: Item; onDeleted: () => Promise<
         <h2>원문</h2>
         <pre className="body-text">{item.body}</pre>
       </section>
+
+      <RelatedRecords itemId={item.id} onOpen={onOpen} />
 
       <footer className="detail-footer">
         <code>{item.path}</code>

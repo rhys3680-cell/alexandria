@@ -138,6 +138,8 @@ function registerIpc(): void {
     return removed;
   });
 
+  ipcMain.handle(IPC.related, async (_event, id: string, limit?: number) => vault().related(id, limit));
+
   ipcMain.handle(IPC.briefing, async (_event, soonDays?: number) =>
     vault().briefing(soonDays === undefined ? undefined : { soonDays }),
   );

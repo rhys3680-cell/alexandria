@@ -1,4 +1,4 @@
-import type { Briefing, Item, ListOptions, PipelineEvent, SearchHit } from '@alexandria/core';
+import type { Briefing, Item, ListOptions, PipelineEvent, RelatedHit, SearchHit } from '@alexandria/core';
 
 export interface VaultStats {
   byStatus: Record<string, number>;
@@ -26,6 +26,9 @@ export interface AlexandriaApi {
   get(id: string): Promise<Item | undefined>;
   remove(id: string): Promise<boolean>;
 
+  /** Past records connected to this one, with the reason for each link. */
+  related(id: string, limit?: number): Promise<RelatedHit[]>;
+
   /** The "먼저 보여주기" view: what needs attention today. */
   briefing(soonDays?: number): Promise<Briefing>;
   setTaskDone(itemId: string, index: number, done: boolean): Promise<Item | undefined>;
@@ -52,6 +55,7 @@ export const IPC = {
   search: 'items:search',
   get: 'items:get',
   remove: 'items:remove',
+  related: 'items:related',
   briefing: 'vault:briefing',
   setTaskDone: 'items:task-done',
   stats: 'vault:stats',
