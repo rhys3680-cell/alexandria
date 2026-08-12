@@ -20,7 +20,9 @@ import {
   openMemoryDatabase,
   parseFrontmatter,
   parseWhisperJson,
+  relatedByFacets,
   searchItems,
+  significantNeighbours,
   slugify,
   stringifyFrontmatter,
   toMatchQuery,
@@ -460,6 +462,116 @@ test('with semantic search off nothing is embedded and search stays lexical', as
     assert.equal(alx.stats().semantic, false);
     assert.equal((await alx.search('데이터베이스 접근 분리', 10)).length, 0);
     assert.equal((await alx.search('sqlite', 10))[0].via, 'lexical');
+  } finally {
+    alx.close();
+    fs.rmSync(vaultDir, { recursive: true, force: true });
+  }
+});
+
+// ------------------------------------------------------------ related records
+
+/** Unit vector at `degrees` from the x-axis, for building a known spread. */
+function atAngle(degrees) {
+  const radians = (degrees * Math.PI) / 180;
+  return Float32Array.from([Math.cos(radians), Math.sin(radians)]);
+}
+
+test('only neighbours above an item\'s own baseline count as related', () => {
+  const query = atAngle(0);
+  const candidates = [
+    { id: 'close', vector: atAngle(5) },
+    { id: 'a', vector: atAngle(45) },
+    { id: 'b', vector: atAngle(55) },
+    { id: 'c', vector: atAngle(60) },
+    { id: 'd', vector: atAngle(65) },
+    { id: 'e', vector: atAngle(70) },
+  ];
+
+  const found = significantNeighbours(candidates, query, 10);
+  assert.deepEqual(found.map((entry) => entry.id), ['close']);
+});
+
+test('a uniformly similar corpus yields no related records', () => {
+  // Everything equidistant: there is no outlier, so the honest answer is none.
+  const candidates = ['a', 'b', 'c', 'd', 'e', 'f'].map((id) => ({ id, vector: atAngle(45) }));
+  assert.deepEqual(significantNeighbours(candidates, atAngle(0), 10), []);
+});
+
+test('too few candidates to establish a baseline yields nothing', () => {
+  const candidates = [
+    { id: 'close', vector: atAngle(1) },
+    { id: 'far', vector: atAngle(80) },
+  ];
+  assert.deepEqual(significantNeighbours(candidates, atAngle(0), 10), []);
+});
+
+test('facet overlap finds shared tags, keywords and people', () => {
+  const db = openMemoryDatabase();
+  const source = makeItem({
+    id: 'SOURCE',
+    path: 'source.md',
+    tags: ['킥오프'],
+    keywords: ['stt'],
+    people: ['김지훈'],
+  });
+  upsertItem(db, source);
+  upsertItem(db, makeItem({ id: 'TWO', path: 'two.md', tags: ['킥오프'], people: ['김지훈'] }));
+  upsertItem(db, makeItem({ id: 'ONE', path: 'one.md', keywords: ['stt'] }));
+  upsertItem(db, makeItem({ id: 'NONE', path: 'none.md', tags: ['무관'] }));
+
+  const matches = relatedByFacets(db, source);
+
+  assert.deepEqual(matches.map((match) => match.id), ['TWO', 'ONE'], '겹치는 개수 순, 자기 자신 제외');
+  assert.deepEqual(new Set(matches[0].shared), new Set(['킥오프', '김지훈']));
+  assert.deepEqual(matches[1].shared, ['stt']);
+  db.close();
+});
+
+test('an item with no facets has no facet matches', () => {
+  const db = openMemoryDatabase();
+  const bare = makeItem({ id: 'BARE', path: 'bare.md' });
+  upsertItem(db, bare);
+  upsertItem(db, makeItem({ id: 'OTHER', path: 'other.md', tags: ['무언가'] }));
+
+  assert.deepEqual(relatedByFacets(db, bare), []);
+  db.close();
+});
+
+test('related records explain themselves and exclude the source', async () => {
+  const vaultDir = fs.mkdtempSync(path.join(os.tmpdir(), 'alexandria-test-'));
+  const results = [
+    { ...ENGLISH_NOTE, title: 'Kickoff meeting', tags: ['kickoff'], keywords: ['stt'], people: ['Jihoon'] },
+    { ...ENGLISH_NOTE, title: 'Benchmark update', tags: ['kickoff'], keywords: ['benchmark'], people: ['Jihoon'] },
+    { ...ENGLISH_NOTE, title: 'Unrelated errand', tags: ['errand'], keywords: ['groceries'], people: [] },
+  ];
+  let call = 0;
+  const llm = {
+    name: 'stub',
+    check: async () => null,
+    complete: async () => ({
+      text: JSON.stringify(results[Math.min(call++, results.length - 1)]),
+      model: 'stub',
+      costUsd: 0,
+      durationMs: 1,
+    }),
+  };
+
+  const alx = new Alexandria({ config: defaultConfig(vaultDir), llm });
+  try {
+    const first = alx.captureText({ text: 'kickoff' });
+    await alx.processPending();
+    alx.captureText({ text: 'benchmark' });
+    await alx.processPending();
+    alx.captureText({ text: 'errand' });
+    await alx.processPending();
+
+    const related = alx.related(first.id);
+
+    assert.equal(related.length, 1, '무관한 항목은 빠진다');
+    assert.equal(related[0].item.title, 'Benchmark update');
+    assert.equal(related[0].via, 'shared');
+    assert.deepEqual(new Set(related[0].shared), new Set(['kickoff', 'Jihoon']));
+    assert.ok(!related.some((hit) => hit.item.id === first.id), '자기 자신은 제외');
   } finally {
     alx.close();
     fs.rmSync(vaultDir, { recursive: true, force: true });
