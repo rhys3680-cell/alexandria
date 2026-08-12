@@ -9,10 +9,14 @@ import {
   buildBriefing,
   claimNextJob,
   defaultConfig,
+  embeddingCount,
+  embeddingText,
   enqueueJob,
   extractJsonObject,
   failJob,
+  fuseRanks,
   listItems,
+  loadEmbeddings,
   openMemoryDatabase,
   parseFrontmatter,
   parseWhisperJson,
@@ -20,6 +24,7 @@ import {
   slugify,
   stringifyFrontmatter,
   toMatchQuery,
+  upsertEmbedding,
   upsertItem,
 } from '../dist/index.js';
 
@@ -271,6 +276,196 @@ test('an unknown item or task index is rejected, not silently ignored', async ()
   }
 });
 
+// ------------------------------------------------------------ semantic search
+
+/**
+ * A deterministic stand-in for the embedding model: three topic axes, reached
+ * through words that do not overlap between document and query. That is
+ * precisely the case lexical search cannot serve.
+ */
+const AXES = {
+  storage: ['sqlite', 'database', '데이터베이스'],
+  migration: ['migrate', 'migration', '이관'],
+  meeting: ['kickoff', '킥오프'],
+};
+
+function stubVector(text) {
+  const lower = text.toLowerCase();
+  const keys = Object.keys(AXES);
+  const vector = new Float32Array(keys.length);
+  keys.forEach((key, index) => {
+    if (AXES[key].some((word) => lower.includes(word.toLowerCase()))) vector[index] = 1;
+  });
+  const norm = Math.hypot(...vector) || 1;
+  for (let i = 0; i < vector.length; i++) vector[i] /= norm;
+  return vector;
+}
+
+const stubEmbedder = {
+  model: 'stub-model',
+  check: async () => null,
+  embedPassages: async (texts) => texts.map(stubVector),
+  embedQuery: async (text) => stubVector(text),
+};
+
+function semanticConfig(vaultDir) {
+  const config = defaultConfig(vaultDir);
+  return { ...config, search: { ...config.search, semantic: true, model: 'stub-model' } };
+}
+
+const ENGLISH_NOTE = {
+  lang: 'en',
+  kind: 'note',
+  title: 'Keep SQLite in the main process',
+  summary: 'The renderer never receives a raw handle.',
+  tags: ['architecture'],
+  keywords: ['sqlite'],
+  people: [],
+  tasks: [],
+  highlights: [],
+};
+
+test('rank fusion favours what both indexes agree on', () => {
+  // 'b' is second in one list and first in the other; 'a' is first then absent.
+  const fused = fuseRanks([
+    ['a', 'b', 'c'],
+    ['b', 'c', 'd'],
+  ]);
+  assert.equal(fused[0].id, 'b');
+  assert.deepEqual(new Set(fused.map((entry) => entry.id)), new Set(['a', 'b', 'c', 'd']));
+  // Scores must decrease monotonically.
+  for (let i = 1; i < fused.length; i++) assert.ok(fused[i - 1].score >= fused[i].score);
+});
+
+test('embedding text leads with the derived fields and is truncated', () => {
+  const item = makeItem({
+    title: '제목',
+    summary: '요약',
+    tags: ['태그'],
+    keywords: ['keyword'],
+    body: 'x'.repeat(5000),
+  });
+  const text = embeddingText(item, 100);
+  assert.ok(text.startsWith('제목\n요약'));
+  assert.equal(text.length, 100);
+});
+
+test('vectors survive the round trip through SQLite', () => {
+  const db = openMemoryDatabase();
+  upsertItem(db, makeItem());
+  const vector = stubVector('sqlite');
+
+  upsertEmbedding(db, '01TESTITEM0000000000000001', 'stub-model', vector);
+  const [stored] = loadEmbeddings(db, 'stub-model');
+
+  assert.equal(stored.id, '01TESTITEM0000000000000001');
+  assert.deepEqual(Array.from(stored.vector), Array.from(vector));
+  assert.equal(embeddingCount(db, 'stub-model'), 1);
+  assert.equal(embeddingCount(db, 'other-model'), 0, '모델이 다르면 세지 않는다');
+  db.close();
+});
+
+test('semantic search finds a note that shares no words with the query', async () => {
+  const vaultDir = fs.mkdtempSync(path.join(os.tmpdir(), 'alexandria-test-'));
+  const alx = new Alexandria({
+    config: semanticConfig(vaultDir),
+    llm: stubLlm(ENGLISH_NOTE),
+    embedder: stubEmbedder,
+  });
+
+  try {
+    alx.captureText({ text: 'We keep SQLite in the main process.' });
+    await alx.processPending();
+
+    // The organize pass queues the embed job, so a vector already exists.
+    assert.equal(alx.stats().embedded, 1);
+
+    const query = '데이터베이스 접근 분리';
+    assert.equal((await alx.search(query, 10, 'lexical')).length, 0, '어휘 검색으로는 못 찾는다');
+
+    const hits = await alx.search(query, 10);
+    assert.equal(hits.length, 1);
+    assert.equal(hits[0].via, 'semantic');
+    assert.equal(hits[0].item.title, 'Keep SQLite in the main process');
+  } finally {
+    alx.close();
+    fs.rmSync(vaultDir, { recursive: true, force: true });
+  }
+});
+
+test('a hit found by both indexes is labelled as such', async () => {
+  const vaultDir = fs.mkdtempSync(path.join(os.tmpdir(), 'alexandria-test-'));
+  const alx = new Alexandria({
+    config: semanticConfig(vaultDir),
+    llm: stubLlm(ENGLISH_NOTE),
+    embedder: stubEmbedder,
+  });
+
+  try {
+    alx.captureText({ text: 'We keep SQLite in the main process.' });
+    await alx.processPending();
+
+    const [hit] = await alx.search('sqlite', 10);
+    assert.equal(hit.via, 'both');
+  } finally {
+    alx.close();
+    fs.rmSync(vaultDir, { recursive: true, force: true });
+  }
+});
+
+test('search degrades to lexical when the embedder fails', async () => {
+  const vaultDir = fs.mkdtempSync(path.join(os.tmpdir(), 'alexandria-test-'));
+  const failing = {
+    ...stubEmbedder,
+    embedQuery: async () => {
+      throw new Error('model unavailable');
+    },
+  };
+  const alx = new Alexandria({
+    config: semanticConfig(vaultDir),
+    llm: stubLlm(ENGLISH_NOTE),
+    embedder: stubEmbedder,
+  });
+
+  try {
+    alx.captureText({ text: 'We keep SQLite in the main process.' });
+    await alx.processPending();
+
+    // Swap in the broken embedder only for querying.
+    Object.defineProperty(alx, 'embedder', { value: failing, configurable: true });
+
+    assert.equal((await alx.search('데이터베이스 접근 분리', 10)).length, 0, '의미 검색은 죽지만 예외는 나지 않는다');
+    const lexical = await alx.search('sqlite', 10);
+    assert.equal(lexical.length, 1);
+    assert.equal(lexical[0].via, 'lexical');
+  } finally {
+    alx.close();
+    fs.rmSync(vaultDir, { recursive: true, force: true });
+  }
+});
+
+test('with semantic search off nothing is embedded and search stays lexical', async () => {
+  const vaultDir = fs.mkdtempSync(path.join(os.tmpdir(), 'alexandria-test-'));
+  const alx = new Alexandria({
+    config: defaultConfig(vaultDir),
+    llm: stubLlm(ENGLISH_NOTE),
+    embedder: stubEmbedder,
+  });
+
+  try {
+    alx.captureText({ text: 'We keep SQLite in the main process.' });
+    await alx.processPending();
+
+    assert.equal(alx.stats().embedded, 0);
+    assert.equal(alx.stats().semantic, false);
+    assert.equal((await alx.search('데이터베이스 접근 분리', 10)).length, 0);
+    assert.equal((await alx.search('sqlite', 10))[0].via, 'lexical');
+  } finally {
+    alx.close();
+    fs.rmSync(vaultDir, { recursive: true, force: true });
+  }
+});
+
 test('capture to organized, driven by a stubbed model', async () => {
   const vaultDir = fs.mkdtempSync(path.join(os.tmpdir(), 'alexandria-test-'));
   const alx = new Alexandria({ config: defaultConfig(vaultDir), llm: stubLlm(KICKOFF) });
@@ -295,7 +490,7 @@ test('capture to organized, driven by a stubbed model', async () => {
     assert.notEqual(organized.path, captured.path);
     assert.ok(!fs.existsSync(path.join(vaultDir, captured.path)));
 
-    assert.equal(alx.search('kickoff').length, 1);
+    assert.equal((await alx.search('kickoff')).length, 1);
 
     // The markdown files are the source of truth: a wiped index rebuilds.
     alx.db.exec('delete from items; delete from items_fts; delete from items_tri;');
