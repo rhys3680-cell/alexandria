@@ -8,7 +8,15 @@ const root = import.meta.dirname;
 // rather than externalised: the app then ships as plain JS with nothing to
 // resolve at runtime. Only Electron itself and node builtins stay external —
 // `node:sqlite` in particular must come from the Electron runtime.
-const nodeExternals = ['electron', /^node:/];
+// transformers.js and its ONNX runtime stay external: they load `.node`
+// binaries and model files at runtime, which a bundler cannot inline.
+const nodeExternals = [
+  'electron',
+  /^node:/,
+  '@huggingface/transformers',
+  'onnxruntime-node',
+  'sharp',
+];
 
 export default defineConfig({
   main: {
