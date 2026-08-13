@@ -22,6 +22,7 @@ import {
   parseFrontmatter,
   parseWhisperJson,
   relatedByFacets,
+  retryFailedJobs,
   searchItems,
   significantNeighbours,
   slugify,
@@ -409,6 +410,44 @@ test('semantic search finds a note that shares no words with the query', async (
     assert.equal(hits.length, 1);
     assert.equal(hits[0].via, 'semantic');
     assert.equal(hits[0].item.title, 'Keep SQLite in the main process');
+  } finally {
+    alx.close();
+    fs.rmSync(vaultDir, { recursive: true, force: true });
+  }
+});
+
+test('a successful embed retry clears the failed state it left behind', async () => {
+  const vaultDir = fs.mkdtempSync(path.join(os.tmpdir(), 'alexandria-test-'));
+  let broken = true;
+  const flaky = {
+    ...stubEmbedder,
+    embedPassages: async (texts) => {
+      if (broken) throw new Error('model unavailable');
+      return texts.map(stubVector);
+    },
+  };
+
+  const alx = new Alexandria({
+    config: semanticConfig(vaultDir),
+    llm: stubLlm(ENGLISH_NOTE),
+    embedder: flaky,
+  });
+
+  try {
+    const captured = alx.captureText({ text: 'We keep SQLite in the main process.' });
+    await alx.processPending();
+
+    assert.equal(alx.get(captured.id).status, 'failed', '재시도를 모두 쓰면 실패로 남는다');
+    assert.equal(alx.stats().embedded, 0);
+
+    broken = false;
+    retryFailedJobs(alx.db);
+    await alx.processPending();
+
+    const recovered = alx.get(captured.id);
+    assert.equal(recovered.status, 'organized', '성공하면 상태가 되돌아온다');
+    assert.equal(recovered.error, undefined);
+    assert.equal(alx.stats().embedded, 1);
   } finally {
     alx.close();
     fs.rmSync(vaultDir, { recursive: true, force: true });
