@@ -116,6 +116,18 @@ Measured on 5 items and 10 queries mixing Korean, Japanese and English. **The sa
 
 The failures point one way: **a Korean query struggles to reach a non-Korean note.** English queries find Korean notes well on e5-base; the reverse is weak. If cross-lingual retrieval matters to you, switch with `alx setup embeddings -m Xenova/bge-m3`. Changing the model discards the old vectors and re-embeds automatically.
 
+## Web browser
+
+Browse inside the app and **capture the page you are looking at** into the vault.
+
+That is the difference from fetching a URL: a page behind a sign-in, or one assembled by scripts, is captured as rendered. A captured page is then organized, tagged and embedded like any other item, so it becomes searchable.
+
+Built on `WebContentsView` rather than the deprecated `<webview>` tag. The page is owned by the main process and floats above the renderer; the React side draws only the address bar and buttons, then reports the rectangle the viewport should occupy.
+
+Isolation: no preload, `sandbox: true`, `contextIsolation: true`, and its own session partition, so the page can never reach the app's IPC. Popups are handed to the system browser. The session persists, so a sign-in survives between visits.
+
+**A known limit** — what gets captured is `innerText`, not extracted article content. Capturing a GitHub page brings its navigation text along. The organize pass still produces a good title, summary and tags, but the stored body carries boilerplate.
+
 ## Conversation console
 
 Talk to the model inside the app. It drives the same `claude` CLI the organize pass uses, so there is no separate authentication.
@@ -311,7 +323,7 @@ pnpm test
 
 ## What's next
 
-Capture, organizing, briefing, search, related records, speech and packaging all work. Remaining:
+Capture, organizing, briefing, search, related records, speech, the console, the browser and packaging all work. Remaining:
 
 - **Code signing** — the installer is unsigned today, so SmartScreen warns on first run
 - **Korean → non-Korean retrieval** — the one direction that consistently failed above

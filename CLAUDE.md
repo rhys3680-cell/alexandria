@@ -58,3 +58,5 @@ Co-Authored-By: ...
 
 - **pnpm 이 설치 스크립트를 지운 채 스토어에 넣는다.** 빌드가 허용되기 전에 추출된 패키지는 `scripts` 가 `null` 로 남고, 나중에 `allowBuilds` 를 켜도 `pnpm rebuild` 가 실행할 것이 없다. electron 이 이 문제로 바이너리 없이 설치되어 `pnpm desktop` 이 `Error: Electron uninstall` 로 죽었다. 루트 `postinstall` 의 `scripts/ensure-electron.mjs` 가 매 설치마다 복구한다
 - **패키징이 성공해도 dev 가 동작한다는 뜻은 아니다.** electron-builder 는 자체 캐시로 Electron 을 따로 받으므로 `node_modules/electron` 이 비어 있어도 설치본은 만들어진다. 둘을 각각 확인한다
+- **`loadURL` 의 프라미스는 성공 신호가 아니다.** 리다이렉트가 기존 내비게이션을 대체하면 `ERR_ABORTED(-3)` 로 거부되는데 페이지는 정상적으로 뜬다. `did-finish-load` / `did-fail-load` 를 봐야 한다
+- **데스크톱 앱에는 자동 테스트가 없다.** 코어는 38개로 덮여 있지만 렌더러와 메인 프로세스는 기동 확인이 전부다. UI 로만 닿는 경로는 임시 스모크를 붙여 실제로 돌려 보고 걷어낸다
