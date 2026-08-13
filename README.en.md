@@ -185,6 +185,25 @@ pnpm desktop
 
 The vault defaults to `~/Alexandria`; override it with the `ALEXANDRIA_VAULT` environment variable or the `--vault` option.
 
+## Building an installer
+
+```bash
+pnpm --filter @alexandria/desktop package
+```
+
+The NSIS installer lands in `apps/desktop/release/`.
+
+What actually mattered here:
+
+- **pnpm layout** — electron-builder has to walk the production dependency tree to decide what ships, and pnpm's default symlinked layout puts a package's dependencies in the store as siblings rather than inside the package. The walk failed and it packed every devDependency instead, producing a **695 MB** `app.asar`. `nodeLinker: hoisted` in `pnpm-workspace.yaml` fixes it.
+- **An explicit allowlist** — rather than trusting the automatic sweep, `electron-builder.yml` names the runtime closure of the three modules the main bundle keeps external (`@huggingface/transformers`, `onnxruntime-node`, `sharp`). Miss one and it fails **loudly** at runtime (`Cannot find module 'detect-libc'`), which beats silently shipping the whole workspace.
+- **`.node` outside the asar** — `dlopen` needs a real path on disk, so those files must be in `asarUnpack`.
+- **Per-platform binaries** — `onnxruntime-node` ships prebuilts for every platform it supports (210 MB); only the target one is kept. Browser-only `onnxruntime-web` (128 MB) is dropped too, and embedding was verified to still work without it.
+
+Result: **1,216 MB → 438 MB** unpacked, with `app.asar` down from 695 MB to 12 MB.
+
+> **Windows note** — renaming a freshly extracted directory sometimes fails with `EPERM`. It is a race: electron-builder renames before the extractor has released its handles. Re-running the build gets past it.
+
 ## CLI
 
 ```bash
@@ -243,7 +262,7 @@ pnpm test
 
 Capture, organizing, briefing, search, related records and speech all work. Remaining:
 
-- **Packaging** — an electron-builder installer, `.node` asar unpacking, code signing
+- **Code signing** — the installer is unsigned today, so SmartScreen warns on first run
 - **Korean → non-Korean retrieval** — the one direction that consistently failed above
 - **Transcription correction** — feed a user dictionary of recurring names and product terms into the organizing prompt
 - **System audio capture** — pick up video call audio too

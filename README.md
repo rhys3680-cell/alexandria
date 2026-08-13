@@ -185,6 +185,25 @@ pnpm desktop
 
 보관소 위치는 기본값이 `~/Alexandria`이고, `ALEXANDRIA_VAULT` 환경변수나 `--vault` 옵션으로 바꿉니다.
 
+## 설치본 만들기
+
+```bash
+pnpm --filter @alexandria/desktop package
+```
+
+`apps/desktop/release/` 에 NSIS 설치 파일이 생깁니다.
+
+패키징에서 실제로 문제가 됐던 것들:
+
+- **pnpm 레이아웃** — electron-builder 는 프로덕션 의존성 트리를 걸어야 무엇을 넣을지 정하는데, pnpm 의 기본 심볼릭 레이아웃에서는 패키지의 의존성이 패키지 안이 아니라 스토어의 형제 위치에 있습니다. 그 결과 devDependency 까지 통째로 담아 `app.asar` 이 **695 MB** 가 됐습니다. `pnpm-workspace.yaml` 의 `nodeLinker: hoisted` 로 해결합니다.
+- **명시적 허용목록** — 자동 수집에 맡기지 않고, 메인 번들이 external 로 둔 세 모듈(`@huggingface/transformers`, `onnxruntime-node`, `sharp`)의 런타임 폐포를 `electron-builder.yml` 에 직접 적었습니다. 빠뜨리면 `Cannot find module 'detect-libc'` 처럼 **즉시 시끄럽게** 실패하는데, 이는 워크스페이스를 통째로 담는 조용한 실패보다 낫습니다.
+- **`.node` 는 asar 밖으로** — `dlopen` 은 디스크상의 실제 경로를 요구하므로 `asarUnpack` 이 필요합니다.
+- **플랫폼별 바이너리** — `onnxruntime-node` 는 지원 플랫폼 전부의 프리빌트를 담고 있어(210 MB) 현재 타깃만 남깁니다. 브라우저 전용인 `onnxruntime-web`(128 MB)도 제외했고, 그 상태로 임베딩이 도는 것을 확인했습니다.
+
+결과: 압축 해제 기준 **1,216 MB → 438 MB**, `app.asar` 은 695 MB → 12 MB.
+
+> **Windows 참고** — 갓 추출된 디렉터리의 이름 변경이 `EPERM` 으로 실패하는 경우가 있습니다. 추출 프로세스가 핸들을 놓기 전에 electron-builder 가 rename 을 시도해서 생기는 경합이고, 그대로 다시 실행하면 통과합니다.
+
 ## CLI
 
 ```bash
@@ -243,7 +262,7 @@ pnpm test
 
 수집·정리·브리핑·검색·관련 기록·음성까지 동작하는 상태입니다. 남은 것:
 
-- **패키징** — electron-builder 설치본, `.node` asar unpack 설정, 코드 서명
+- **코드 서명** — 현재 설치본은 서명되지 않아 SmartScreen 경고가 뜹니다
 - **한국어 → 비한국어 검색 개선** — 위 측정에서 유일하게 일관되게 실패하는 방향
 - **전사 오류 보정** — 사용자 사전(자주 쓰는 이름·제품명)을 정리 프롬프트에 넣어 오인식을 교정
 - **시스템 오디오 캡처** — 화상회의 소리까지 수집
