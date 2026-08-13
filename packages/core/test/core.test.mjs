@@ -11,6 +11,7 @@ import {
   buildAskSystemPrompt,
   buildBriefing,
   buildWhisperPrompt,
+  guessLanguage,
   claimNextJob,
   dictionaryPath,
   loadDictionary,
@@ -602,6 +603,15 @@ test('with semantic search off nothing is embedded and search stays lexical', as
     alx.close();
     fs.rmSync(vaultDir, { recursive: true, force: true });
   }
+});
+
+test('the spoken language is guessed from the script', () => {
+  assert.equal(guessLanguage('안녕하세요, 회의 정리했습니다'), 'ko');
+  assert.equal(guessLanguage('こんにちは、打ち合わせです'), 'ja');
+  assert.equal(guessLanguage('数据迁移会议'), 'zh');
+  assert.equal(guessLanguage('All set for the kickoff'), 'en');
+  // Mixed text follows the non-latin script, which is what picks the voice.
+  assert.equal(guessLanguage('whisper 모델 비교'), 'ko');
 });
 
 // -------------------------------------------------------------------- ask
