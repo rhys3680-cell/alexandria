@@ -11,8 +11,14 @@ import type {
   AlexandriaConfig,
 } from '@alexandria/core';
 
-/** Every field optional, all the way down — settings save one section at a time. */
-export type DeepPartial<T> = { [K in keyof T]?: T[K] extends object ? DeepPartial<T[K]> : T[K] };
+/**
+ * Every field optional, all the way down — settings save one section at a time.
+ * Arrays are left whole: recursing into them turns `string[]` into
+ * `(string | undefined)[]`, which is never what a patch means.
+ */
+export type DeepPartial<T> = {
+  [K in keyof T]?: T[K] extends readonly unknown[] ? T[K] : T[K] extends object ? DeepPartial<T[K]> : T[K];
+};
 
 export interface AskRequest {
   /** Correlates streamed chunks with this turn. */

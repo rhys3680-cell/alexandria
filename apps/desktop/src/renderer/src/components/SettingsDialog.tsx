@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { AlexandriaConfig } from '@alexandria/core';
-import type { DoctorCheck, SetupProgress } from '../../shared/api.js';
+import type { DoctorCheck, SetupProgress } from '../../../shared/api.js';
 import { Button } from './ui/button.js';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from './ui/dialog.js';
 import { Input, Label, Textarea } from './ui/input.js';

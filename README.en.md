@@ -379,6 +379,14 @@ The renderer only sees the narrow API exposed over `contextBridge`. No database 
 ## Tests
 
 ```bash
+pnpm test                                   # 42 core tests
+pnpm --filter @alexandria/desktop e2e       # Electron e2e (Playwright)
+```
+
+For Electron, Playwright drives the real app, clicks through it and writes screenshots. That is how two "it launched but the screen is wrong" bugs were caught — the shell grid handing its `1fr` row to the setup banner, and a modifier class named `fixed` colliding with the Tailwind utility and tearing a pane out of the grid. Neither is visible to a launch check.
+
+
+```bash
 pnpm test
 ```
 

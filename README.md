@@ -379,6 +379,14 @@ apps/desktop      Electron + React. 메인 프로세스가 코어 인스턴스�
 ## 테스트
 
 ```bash
+pnpm test                                   # 코어 42개
+pnpm --filter @alexandria/desktop e2e       # Electron e2e (Playwright)
+```
+
+Electron 쪽은 Playwright 가 실제 앱을 띄워 클릭하고 스크린샷을 남깁니다. 이 방식으로 "실행은 되는데 화면이 깨진" 두 건을 잡았습니다 — 셸 그리드가 배너에 `1fr` 행을 내준 것, 그리고 수식 클래스 `fixed` 가 Tailwind 유틸리티와 겹쳐 패널이 그리드에서 튀어나간 것. 둘 다 기동 확인으로는 보이지 않습니다.
+
+
+```bash
 pnpm test
 ```
 
