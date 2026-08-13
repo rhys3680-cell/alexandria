@@ -243,6 +243,20 @@ export class Alexandria {
 
     // Embedding is derived data only: the markdown file is untouched.
     store.upsertEmbedding(this.db, item.id, this.config.search.model, vector);
+
+    // Unlike transcribe and organize, embedding does not otherwise change the
+    // item — so an item marked failed by an earlier embed attempt would stay
+    // failed forever after a successful retry.
+    if (item.status === 'failed') {
+      const recovered = this.vault.writeItem({
+        ...item,
+        status: item.organizedAt ? 'organized' : 'transcribed',
+        error: undefined,
+        updated: nowIso(),
+      });
+      store.upsertItem(this.db, recovered);
+      return { item: recovered, costUsd: 0 };
+    }
     return { item, costUsd: 0 };
   }
 
