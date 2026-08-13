@@ -10,6 +10,7 @@ import {
   guessLanguage,
   WindowsSapiSpeaker,
   type Item,
+  type ItemPatch,
   type ListOptions,
   type PipelineEvent,
 } from '@alexandria/core';
@@ -152,6 +153,24 @@ function registerIpc(): void {
   });
 
   ipcMain.handle(IPC.related, async (_event, id: string, limit?: number) => vault().related(id, limit));
+
+  ipcMain.handle(IPC.updateItem, async (_event, id: string, patch: ItemPatch) => {
+    const updated = vault().updateItem(id, patch);
+    if (updated) {
+      broadcast(IPC.changed);
+      void drainQueue();
+    }
+    return updated;
+  });
+
+  ipcMain.handle(IPC.reorganize, async (_event, id: string) => {
+    const queued = vault().reorganize(id);
+    if (queued) {
+      broadcast(IPC.changed);
+      void drainQueue();
+    }
+    return queued;
+  });
 
   ipcMain.handle(IPC.browserAttach, async (_event, bounds: BrowserBounds) => browser().attach(bounds));
   ipcMain.handle(IPC.browserDetach, async () => browser().detach());

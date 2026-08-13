@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Briefing, BriefingTask, Item, RelatedHit, SearchHit, ToolAccess } from '@alexandria/core';
 import type { BrowserState, DoctorCheck, VaultStats } from '../../shared/api.js';
+import { EditItemDialog } from './components/EditItemDialog.js';
+import { Button } from './components/ui/button.js';
 
 const STATUS_LABEL: Record<string, string> = {
   raw: '대기',
@@ -195,6 +197,8 @@ export function App(): React.JSX.Element {
             <ItemDetail
               item={selected}
               onOpen={selectItem}
+              onChanged={refresh}
+              onNotice={showNotice}
               onDeleted={async () => {
                 await window.alexandria.remove(selected.id);
                 setSelectedId(undefined);
@@ -934,11 +938,16 @@ function ItemDetail({
   item,
   onDeleted,
   onOpen,
+  onChanged,
+  onNotice,
 }: {
   item: Item;
   onDeleted: () => Promise<void>;
   onOpen: (id: string) => void;
+  onChanged: () => Promise<void>;
+  onNotice: (message: string) => void;
 }): React.JSX.Element {
+  const [editing, setEditing] = useState(false);
   return (
     <article className="detail">
       <h1>{item.title ?? '(정리 전)'}</h1>
@@ -991,10 +1000,29 @@ function ItemDetail({
 
       <footer className="detail-footer">
         <code>{item.path}</code>
-        <button className="danger" onClick={() => void onDeleted()}>
-          삭제
-        </button>
+        <div className="flex items-center gap-2">
+          <Button size="sm" onClick={() => setEditing(true)}>
+            고치기
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            title="사전을 바꿨거나 정리가 마음에 들지 않을 때"
+            onClick={async () => {
+              await window.alexandria.reorganize(item.id);
+              onNotice('다시 정리를 대기열에 넣었습니다.');
+              await onChanged();
+            }}
+          >
+            다시 정리
+          </Button>
+          <Button size="sm" variant="danger" onClick={() => void onDeleted()}>
+            삭제
+          </Button>
+        </div>
       </footer>
+
+      <EditItemDialog item={item} open={editing} onOpenChange={setEditing} onSaved={onChanged} />
     </article>
   );
 }

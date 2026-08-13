@@ -74,6 +74,17 @@ export interface AlexandriaDeps {
 
 export type SearchMode = 'auto' | 'lexical' | 'semantic';
 
+/** Fields a person may correct by hand. Anything omitted is left alone. */
+export interface ItemPatch {
+  title?: string;
+  summary?: string;
+  tags?: string[];
+  keywords?: string[];
+  people?: string[];
+  kind?: Item['kind'];
+  lang?: string;
+}
+
 export interface RelatedHit {
   item: Item;
   score: number;
@@ -499,6 +510,43 @@ export class Alexandria {
     };
   }
 
+  /**
+   * Corrects an item by hand.
+   *
+   * Speech recognition puts wrong names into `people` and nothing downstream
+   * can catch them, so the archive needs a way to be fixed. The markdown file
+   * is the source of truth, so the edit lands there; the index and the vector
+   * follow.
+   */
+  updateItem(id: string, patch: ItemPatch): Item | undefined {
+    const item = store.getItem(this.db, id);
+    if (!item) return undefined;
+
+    const merged: Item = {
+      ...item,
+      ...pickDefined(patch),
+      updated: nowIso(),
+    };
+    // The filename is derived from the title, so a retitled item is renamed.
+    const written = this.vault.writeItem(merged, { rename: merged.title !== item.title });
+    store.upsertItem(this.db, written);
+
+    // The embedding is built from title, summary and tags, so it is now stale.
+    if (this.config.search.semantic && written.status === 'organized') {
+      enqueueJob(this.db, written.id, 'embed');
+    }
+    this.logger.info('항목 수정', { id, fields: Object.keys(pickDefined(patch)) });
+    return written;
+  }
+
+  /** Queues the organize pass again — after a dictionary change, for instance. */
+  reorganize(id: string): boolean {
+    const item = store.getItem(this.db, id);
+    if (!item || !item.body.trim()) return false;
+    enqueueJob(this.db, id, 'organize');
+    return true;
+  }
+
   /** Stores a question and its answer as a normal item, so it gets organized. */
   saveAnswer(question: string, answer: string, sourceRef?: string): Item {
     return this.captureText({
@@ -658,6 +706,11 @@ export class Alexandria {
 
 export function createLoggerForCli(verbose: boolean): Logger {
   return verbose ? createLogger('debug') : createLogger('warn');
+}
+
+/** Drops undefined keys so a patch never blanks a field it did not mention. */
+function pickDefined<T extends object>(patch: T): Partial<T> {
+  return Object.fromEntries(Object.entries(patch).filter(([, value]) => value !== undefined)) as Partial<T>;
 }
 
 function nowIso(): string {

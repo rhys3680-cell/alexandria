@@ -343,6 +343,17 @@ captureAudio ─→ transcribe ─→ ────────┘
 - An item only gets a title once organizing finishes, so that is the single point at which its file is renamed.
 - An item that fails for good keeps its `failed` status and the reason in the file, and `alx retry` brings it back.
 
+## UI
+
+Korean is the primary script here, so **Pretendard** is bundled (one 2 MB variable file, works offline).
+
+Components are moving to **Tailwind v4 + shadcn/ui**, applied to new screens first. The migration is deliberately gradual:
+
+- **Preflight is off.** Tailwind's global reset changes list markers, button defaults and typography all at once, which would restyle every screen still drawn by hand-written CSS. When the last of that CSS is gone, switching to `@import 'tailwindcss'` brings the reset back.
+- **One palette.** `@theme inline` points at the CSS variables that already exist (`--bg`, `--accent`, …), so Tailwind classes and hand-written rules cannot drift, and dark mode keeps working through the existing media query.
+
+Migrated so far: the edit-item dialog and the detail view's actions.
+
 ## Layout
 
 ```
@@ -359,12 +370,13 @@ The renderer only sees the narrow API exposed over `contextBridge`. No database 
 pnpm test
 ```
 
-39 tests run against the built artifacts: frontmatter round-trips, filename normalisation, FTS query escaping, cross-lingual search, CJK trigram search, queue retries, task completion reaching the file, briefing due-date bucketing, rank fusion, vector storage, the relatedness floor, the dictionary reaching both whisper and the organize prompt, context injection and session resume for the console, and the whole capture-to-organized path with the model and embedder stubbed.
+42 tests run against the built artifacts: frontmatter round-trips, filename normalisation, FTS query escaping, cross-lingual search, CJK trigram search, queue retries, task completion reaching the file, briefing due-date bucketing, rank fusion, vector storage, the relatedness floor, the dictionary reaching both whisper and the organize prompt, context injection and session resume for the console, and the whole capture-to-organized path with the model and embedder stubbed.
 
 ## What's next
 
 Capture, organizing, briefing, search, related records, speech, the console, the browser and packaging all work. Remaining:
 
+- **Finish the UI migration** — move the remaining hand-written CSS to Tailwind and turn preflight on
 - **Code signing** — the installer is unsigned today, so SmartScreen warns on first run
 - **Korean → non-Korean retrieval** — the one direction that consistently failed above
 - **System audio capture** — pick up video call audio too

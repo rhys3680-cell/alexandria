@@ -7,6 +7,7 @@ import type {
   RelatedHit,
   SearchHit,
   ToolAccess,
+  ItemPatch,
 } from '@alexandria/core';
 
 export interface AskRequest {
@@ -68,6 +69,11 @@ export interface AlexandriaApi {
   get(id: string): Promise<Item | undefined>;
   remove(id: string): Promise<boolean>;
 
+  /** Corrects an item by hand; the markdown file is rewritten. */
+  updateItem(id: string, patch: ItemPatch): Promise<Item | undefined>;
+  /** Queues the organize pass again. */
+  reorganize(id: string): Promise<boolean>;
+
   /** Past records connected to this one, with the reason for each link. */
   related(id: string, limit?: number): Promise<RelatedHit[]>;
 
@@ -124,6 +130,8 @@ export const IPC = {
   get: 'items:get',
   remove: 'items:remove',
   related: 'items:related',
+  updateItem: 'items:update',
+  reorganize: 'items:reorganize',
   browserAttach: 'browser:attach',
   browserDetach: 'browser:detach',
   browserNavigate: 'browser:navigate',

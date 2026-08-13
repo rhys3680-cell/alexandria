@@ -1,6 +1,7 @@
 import { resolve } from 'node:path';
 import { defineConfig } from 'electron-vite';
 import react from '@vitejs/plugin-react';
+import tailwind from '@tailwindcss/vite';
 
 const root = import.meta.dirname;
 
@@ -46,6 +47,6 @@ export default defineConfig({
         input: resolve(root, 'src/renderer/index.html'),
       },
     },
-    plugins: [react()],
+    plugins: [react(), tailwind()],
   },
 });

@@ -704,6 +704,75 @@ test('a saved answer keeps the question and is queued for organizing', async () 
   }
 });
 
+test('a hand edit lands in the file and is not blanked by omission', async () => {
+  const vaultDir = fs.mkdtempSync(path.join(os.tmpdir(), 'alexandria-test-'));
+  const alx = new Alexandria({ config: defaultConfig(vaultDir), llm: stubLlm(KICKOFF) });
+
+  try {
+    const captured = alx.captureText({ text: '킥오프 회의 잡았다.' });
+    await alx.processPending();
+    const before = alx.get(captured.id);
+    assert.deepEqual(before.people, ['김지훈']);
+
+    // Only the wrong name is corrected; everything else must survive.
+    const updated = alx.updateItem(captured.id, { people: ['박서연'] });
+    assert.deepEqual(updated.people, ['박서연']);
+    assert.equal(updated.title, before.title, '언급하지 않은 필드는 그대로');
+    assert.deepEqual(updated.tags, before.tags);
+
+    const onDisk = fs.readFileSync(path.join(vaultDir, updated.path), 'utf8');
+    assert.match(onDisk, /박서연/);
+    assert.ok(!onDisk.includes('김지훈'));
+
+    alx.reindex();
+    assert.deepEqual(alx.get(captured.id).people, ['박서연'], '재색인 후에도 유지');
+
+    assert.equal(alx.updateItem('없는아이디', { title: 'x' }), undefined);
+  } finally {
+    alx.close();
+    fs.rmSync(vaultDir, { recursive: true, force: true });
+  }
+});
+
+test('retitling renames the file and drops the old one', async () => {
+  const vaultDir = fs.mkdtempSync(path.join(os.tmpdir(), 'alexandria-test-'));
+  const alx = new Alexandria({ config: defaultConfig(vaultDir), llm: stubLlm(KICKOFF) });
+
+  try {
+    const captured = alx.captureText({ text: '킥오프 회의 잡았다.' });
+    await alx.processPending();
+    const before = alx.get(captured.id);
+
+    const updated = alx.updateItem(captured.id, { title: '배포 일정 회의' });
+
+    assert.notEqual(updated.path, before.path);
+    assert.ok(updated.path.includes('배포-일정-회의'), updated.path);
+    assert.ok(fs.existsSync(path.join(vaultDir, updated.path)));
+    assert.ok(!fs.existsSync(path.join(vaultDir, before.path)), '옛 파일은 남지 않는다');
+  } finally {
+    alx.close();
+    fs.rmSync(vaultDir, { recursive: true, force: true });
+  }
+});
+
+test('reorganize queues the pass again, and refuses an empty item', async () => {
+  const vaultDir = fs.mkdtempSync(path.join(os.tmpdir(), 'alexandria-test-'));
+  const alx = new Alexandria({ config: defaultConfig(vaultDir), llm: stubLlm(KICKOFF) });
+
+  try {
+    const captured = alx.captureText({ text: '킥오프 회의 잡았다.' });
+    await alx.processPending();
+    assert.equal(alx.pendingCount(), 0);
+
+    assert.equal(alx.reorganize(captured.id), true);
+    assert.equal(alx.pendingCount(), 1);
+    assert.equal(alx.reorganize('없는아이디'), false);
+  } finally {
+    alx.close();
+    fs.rmSync(vaultDir, { recursive: true, force: true });
+  }
+});
+
 // ------------------------------------------------------------ related records
 
 /** Unit vector at `degrees` from the x-axis, for building a known spread. */

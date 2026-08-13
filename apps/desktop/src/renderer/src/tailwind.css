@@ -1,0 +1,36 @@
+/*
+ * Tailwind is brought in without preflight on purpose.
+ *
+ * The app already has ~750 lines of hand-written CSS that this is meant to
+ * replace one screen at a time. Preflight resets list markers, button styling
+ * and typography globally, so enabling it would restyle every screen at once —
+ * exactly the big-bang change an incremental migration is trying to avoid.
+ * Once the last hand-written rule is gone, swap these imports for
+ * `@import 'tailwindcss'` and get the reset back.
+ */
+@layer theme, base, components, utilities;
+
+@import 'tailwindcss/theme.css' layer(theme);
+@import 'tailwindcss/utilities.css' layer(utilities);
+
+/*
+ * One palette for both systems. These point at the variables styles.css
+ * already defines, so a Tailwind class and a hand-written rule cannot drift,
+ * and dark mode keeps working through the existing media query.
+ */
+@theme inline {
+  --color-bg: var(--bg);
+  --color-panel: var(--panel);
+  --color-panel-alt: var(--panel-alt);
+  --color-fg: var(--text);
+  --color-fg-dim: var(--text-dim);
+  --color-line: var(--line);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-danger: var(--danger);
+  --color-ok: var(--ok);
+  --color-warn: var(--warn);
+
+  --font-sans: var(--font);
+  --radius-card: var(--radius);
+}
