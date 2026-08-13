@@ -878,3 +878,24 @@ button:disabled {
   color: var(--text-dim);
   word-break: break-all;
 }
+
+.recorder {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.recorder .source {
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 12px;
+  outline: none;
+}
+
+.recorder .source:focus {
+  border-color: var(--accent);
+}

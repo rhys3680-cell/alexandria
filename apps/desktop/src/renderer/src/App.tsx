@@ -4,6 +4,7 @@ import type { BrowserState, DoctorCheck, VaultStats } from '../../shared/api.js'
 import { EditItemDialog } from './components/EditItemDialog.js';
 import { SettingsDialog } from './components/SettingsDialog.js';
 import { Button } from './components/ui/button.js';
+import { openRecording, SOURCE_LABELS, type RecordingSource } from './lib/audio.js';
 
 const STATUS_LABEL: Record<string, string> = {
   raw: '대기',
@@ -308,7 +309,9 @@ function Recorder({
 }): React.JSX.Element {
   const [recording, setRecording] = useState(false);
   const [seconds, setSeconds] = useState(0);
+  const [source, setSource] = useState<RecordingSource>('mic');
   const recorderRef = useRef<MediaRecorder | undefined>(undefined);
+  const releaseRef = useRef<(() => void) | undefined>(undefined);
   const chunksRef = useRef<Blob[]>([]);
 
   useEffect(() => {
@@ -319,15 +322,18 @@ function Recorder({
 
   const start = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const recorder = new MediaRecorder(stream);
+      const opened = await openRecording(source, () => window.alexandria.desktopSourceId());
+      const recorder = new MediaRecorder(opened.stream);
       chunksRef.current = [];
+      releaseRef.current = opened.release;
 
       recorder.ondataavailable = (event) => {
         if (event.data.size > 0) chunksRef.current.push(event.data);
       };
       recorder.onstop = async () => {
-        for (const track of stream.getTracks()) track.stop();
+        releaseRef.current?.();
+        releaseRef.current = undefined;
+
         const blob = new Blob(chunksRef.current, { type: recorder.mimeType });
         if (blob.size === 0) {
           onNotice('녹음된 소리가 없습니다.');
@@ -343,7 +349,7 @@ function Recorder({
       setSeconds(0);
       setRecording(true);
     } catch (error) {
-      onNotice(`마이크를 열 수 없습니다: ${(error as Error).message}`);
+      onNotice(`녹음을 시작할 수 없습니다: ${(error as Error).message}`);
     }
   };
 
@@ -354,9 +360,25 @@ function Recorder({
   };
 
   return (
-    <button className={recording ? 'record active' : 'record'} onClick={() => (recording ? stop() : void start())}>
-      {recording ? `■ ${formatSeconds(seconds)}` : '● 녹음'}
-    </button>
+    <div className="recorder">
+      {!recording ? (
+        <select
+          className="source"
+          value={source}
+          title="무엇을 녹음할지 고릅니다"
+          onChange={(event) => setSource(event.target.value as RecordingSource)}
+        >
+          {(Object.keys(SOURCE_LABELS) as RecordingSource[]).map((value) => (
+            <option key={value} value={value}>
+              {SOURCE_LABELS[value]}
+            </option>
+          ))}
+        </select>
+      ) : undefined}
+      <button className={recording ? 'record active' : 'record'} onClick={() => (recording ? stop() : void start())}>
+        {recording ? `■ ${formatSeconds(seconds)}` : '● 녹음'}
+      </button>
+    </div>
   );
 }
 

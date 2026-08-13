@@ -29,6 +29,7 @@ const api: AlexandriaApi = {
   captureAudio: (buffer, extension) =>
     ipcRenderer.invoke(IPC.captureAudio, buffer, extension) as Promise<Item>,
   captureFiles: (paths) => ipcRenderer.invoke(IPC.captureFiles, paths) as Promise<Item[]>,
+  desktopSourceId: () => ipcRenderer.invoke(IPC.desktopSourceId) as Promise<string | undefined>,
   pathForFile: (file) => webUtils.getPathForFile(file),
 
   list: (options?: ListOptions) => ipcRenderer.invoke(IPC.list, options) as Promise<Item[]>,

@@ -77,6 +77,11 @@ export interface DoctorCheck {
 /** The entire surface the renderer is allowed to touch. */
 export interface AlexandriaApi {
   captureText(text: string): Promise<Item>;
+  /**
+   * Id of a screen source, which Chromium requires before it will hand over
+   * the system audio loopback. Undefined when none is available.
+   */
+  desktopSourceId(): Promise<string | undefined>;
   /** Raw bytes from MediaRecorder; the main process owns the filesystem. */
   captureAudio(buffer: ArrayBuffer, extension: string): Promise<Item>;
   captureFiles(paths: string[]): Promise<Item[]>;
@@ -166,6 +171,7 @@ export const IPC = {
   captureText: 'capture:text',
   captureAudio: 'capture:audio',
   captureFiles: 'capture:files',
+  desktopSourceId: 'capture:desktop-source',
   list: 'items:list',
   search: 'items:search',
   get: 'items:get',

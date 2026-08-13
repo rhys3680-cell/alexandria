@@ -221,6 +221,67 @@ function buildSilentWav(seconds: number): Buffer {
   return Buffer.concat([header, data]);
 }
 
+test('the loopback actually carries sound, not just a track', async () => {
+  // A system-audio track that yields silence looks identical to a working one
+  // until something is played through it. TTS gives the test a real sound
+  // source, and the analyser says whether it arrived.
+  const peak = await page.evaluate(async () => {
+    const sourceId = await window.alexandria.desktopSourceId();
+    if (!sourceId) return -1;
+
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: { mandatory: { chromeMediaSource: 'desktop' } },
+      video: {
+        mandatory: { chromeMediaSource: 'desktop', chromeMediaSourceId: sourceId, maxWidth: 1, maxHeight: 1 },
+      },
+    } as unknown as MediaStreamConstraints);
+    for (const track of stream.getVideoTracks()) {
+      track.stop();
+      stream.removeTrack(track);
+    }
+
+    const context = new AudioContext();
+    const analyser = context.createAnalyser();
+    context.createMediaStreamSource(stream).connect(analyser);
+    const buffer = new Float32Array(analyser.fftSize);
+
+    void window.alexandria.speak('시스템 소리 캡처 확인용 문장입니다.');
+
+    let loudest = 0;
+    const started = Date.now();
+    while (Date.now() - started < 9000) {
+      analyser.getFloatTimeDomainData(buffer);
+      for (const sample of buffer) loudest = Math.max(loudest, Math.abs(sample));
+      if (loudest > 0.01) break;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+
+    for (const track of stream.getTracks()) track.stop();
+    await context.close();
+    await window.alexandria.stopSpeaking();
+    return loudest;
+  });
+
+  expect(peak).toBeGreaterThan(0.001);
+});
+
+test('a system-audio recording becomes an item with media', async () => {
+  await page.locator('.header button[title="오늘 챙길 것들"]').click();
+  await page.locator('.recorder .source').selectOption('system');
+  await page.locator('.record').click();
+  await expect(page.locator('.record.active')).toBeVisible();
+
+  await page.waitForTimeout(1500);
+  await page.locator('.record.active').click();
+
+  // The saved recording lands at the top of the list with a player attached.
+  const first = page.locator('.list li').first();
+  await expect(first).toBeVisible({ timeout: 15_000 });
+  await first.click();
+  await expect(page.locator('.recording audio')).toBeVisible({ timeout: 10_000 });
+  await page.screenshot({ path: path.join(SHOTS, '07-system-recording.png') });
+});
+
 test('closing the window with the browser open shuts down cleanly', async () => {
   // The exact path that crashed: the in-app browser is attached, the window is
   // closed, and `before-quit` then tears the browser down after the window has

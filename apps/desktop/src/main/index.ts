@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { randomBytes } from 'node:crypto';
-import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
+import { app, BrowserWindow, desktopCapturer, dialog, ipcMain, shell } from 'electron';
 import {
   Alexandria,
   createLogger,
@@ -153,6 +153,13 @@ function registerIpc(): void {
     broadcast(IPC.changed);
     void drainQueue();
     return captured;
+  });
+
+  ipcMain.handle(IPC.desktopSourceId, async () => {
+    // Loopback audio is only granted alongside a desktop video source, so the
+    // renderer needs an id even though it throws the video track away.
+    const sources = await desktopCapturer.getSources({ types: ['screen'] });
+    return sources[0]?.id;
   });
 
   ipcMain.handle(IPC.list, async (_event, options?: ListOptions) => vault().list(options));

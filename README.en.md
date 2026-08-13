@@ -62,6 +62,14 @@ Measured on a 20-second Korean memo against a known transcript.
 
 **`base` transcribed English word for word but got a person's name wrong in Korean.** A wrong name flows straight into the item's `people` field, where nothing downstream can catch it. Wrong data is worse than slow data, so `small` is the default. If you only capture English, `base` is plenty.
 
+### Choosing what to record
+
+Next to the record button: **microphone / system audio / both**.
+
+For a video call it is **both**. Your voice comes from the microphone and everyone else's from the system loopback, and the two have to end up in one track or the transcript carries only half the conversation.
+
+Chromium only hands over system audio as part of a screen capture, so a 1x1 video track is requested alongside it and dropped immediately. **The screen is never recorded.**
+
 ### A recording can always be played back
 
 Opening an item shows a player above the transcript. That matters most **when transcription failed or is still queued** — hearing it is the only way to know whether anything was captured at all. The file path and a "reveal in folder" action sit alongside it.
@@ -429,4 +437,3 @@ Capture, organizing, briefing, search, related records, speech, the console, the
 - **Finish the UI migration** — move the remaining hand-written CSS to Tailwind and turn preflight on
 - **Code signing** — the installer is unsigned today, so SmartScreen warns on first run
 - **Korean → non-Korean retrieval** — the one direction that consistently failed above
-- **System audio capture** — pick up video call audio too
