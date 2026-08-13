@@ -116,6 +116,25 @@ Measured on 5 items and 10 queries mixing Korean, Japanese and English. **The sa
 
 The failures point one way: **a Korean query struggles to reach a non-Korean note.** English queries find Korean notes well on e5-base; the reverse is weak. If cross-lingual retrieval matters to you, switch with `alx setup embeddings -m Xenova/bge-m3`. Changing the model discards the old vectors and re-embeds automatically.
 
+## Voice conversation
+
+The console takes **spoken questions and can read answers back**.
+
+- **Speak** — record, transcribe with whisper, send as the question. The transcript appears as your turn, so a misheard question is visible rather than silently answered, and `dictionary.txt` applies here too so names stay right.
+- **Read aloud** — answers are spoken by a system voice, picked to match the script (Korean, Japanese, English).
+
+The CLI does it too:
+
+```bash
+alx ask --speak "what is due today?"
+```
+
+### Why Windows SAPI
+
+The browser-standard `speechSynthesis` was the obvious choice and turned out to have **zero voices in this Electron build** (`supported: true`, `count: 0`). So speech goes through Windows SAPI, already on the machine, as a child process — local, free, and nothing leaves the device.
+
+**A known limit** — PowerShell startup means **2–3 seconds before speech begins**. The answer text streams in first, but it still breaks the rhythm of a conversation; replacing the per-utterance spawn with a resident process is left as follow-up work. Reading stops at 2,000 characters, and platforms other than Windows are not supported yet.
+
 ## Web browser
 
 Browse inside the app and **capture the page you are looking at** into the vault.
@@ -319,7 +338,7 @@ The renderer only sees the narrow API exposed over `contextBridge`. No database 
 pnpm test
 ```
 
-38 tests run against the built artifacts: frontmatter round-trips, filename normalisation, FTS query escaping, cross-lingual search, CJK trigram search, queue retries, task completion reaching the file, briefing due-date bucketing, rank fusion, vector storage, the relatedness floor, the dictionary reaching both whisper and the organize prompt, context injection and session resume for the console, and the whole capture-to-organized path with the model and embedder stubbed.
+39 tests run against the built artifacts: frontmatter round-trips, filename normalisation, FTS query escaping, cross-lingual search, CJK trigram search, queue retries, task completion reaching the file, briefing due-date bucketing, rank fusion, vector storage, the relatedness floor, the dictionary reaching both whisper and the organize prompt, context injection and session resume for the console, and the whole capture-to-organized path with the model and embedder stubbed.
 
 ## What's next
 
