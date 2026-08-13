@@ -1,3 +1,10 @@
+/*
+ * Pretendard, bundled rather than fetched: this is a desktop app that has to
+ * look right offline. The variable file is one 2 MB asset covering every
+ * weight, which beats the dynamic subset when the font loads from local disk.
+ */
+@import 'pretendard/dist/web/variable/pretendardvariable.css';
+
 :root {
   --bg: #faf9f7;
   --panel: #ffffff;
@@ -11,7 +18,7 @@
   --ok: #2f855a;
   --warn: #b7791f;
   --radius: 10px;
-  --font: 'Segoe UI', 'Malgun Gothic', 'Hiragino Sans', system-ui, sans-serif;
+  --font: 'Pretendard Variable', Pretendard, 'Hiragino Sans', system-ui, sans-serif;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -46,7 +53,10 @@ body {
   color: var(--text);
   background: var(--bg);
   font-size: 14px;
+  line-height: 1.6;
+  letter-spacing: -0.003em;
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 button {
@@ -746,4 +756,38 @@ button:disabled {
   background: var(--danger);
   border-color: var(--danger);
   color: #fff;
+}
+
+/* --------------------------------------------------------- setup banner */
+
+.setup-banner {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 16px;
+  background: var(--panel-alt);
+  border-bottom: 1px solid var(--line);
+  font-size: 13px;
+}
+
+.setup-banner ul {
+  margin: 6px 0;
+  padding-left: 18px;
+  line-height: 1.9;
+}
+
+.setup-banner code {
+  margin-left: 8px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  font-size: 12px;
+  user-select: all;
+}
+
+.setup-banner .dim {
+  color: var(--text-dim);
+  font-size: 12px;
 }

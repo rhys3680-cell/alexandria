@@ -603,7 +603,7 @@ export class Alexandria {
     return indexed;
   }
 
-  async doctor(): Promise<{ name: string; ok: boolean; detail?: string }[]> {
+  async doctor(): Promise<{ name: string; ok: boolean; detail?: string; fix?: string }[]> {
     const llmProblem = await this.llm.check();
     const sttProblem = await this.transcriber.check();
     // Semantic search being off is a choice, not a fault, so it is not reported
@@ -611,14 +611,25 @@ export class Alexandria {
     const embedProblem = this.config.search.semantic ? await this.embedder.check() : null;
 
     return [
-      { name: `LLM (${this.llm.name}, model=${this.config.llm.model})`, ok: !llmProblem, detail: llmProblem ?? undefined },
-      { name: `STT (${this.transcriber.name})`, ok: !sttProblem, detail: sttProblem ?? undefined },
+      {
+        name: `LLM (${this.llm.name}, model=${this.config.llm.model})`,
+        ok: !llmProblem,
+        detail: llmProblem ?? undefined,
+        fix: llmProblem ? 'npm i -g @anthropic-ai/claude-code' : undefined,
+      },
+      {
+        name: `STT (${this.transcriber.name})`,
+        ok: !sttProblem,
+        detail: sttProblem ?? undefined,
+        fix: sttProblem ? 'pnpm alx setup whisper' : undefined,
+      },
       {
         name: `의미 검색 (${this.config.search.model})`,
         ok: !embedProblem,
         detail: this.config.search.semantic
           ? embedProblem ?? `벡터 ${store.embeddingCount(this.db, this.config.search.model)}건`
-          : '꺼짐 — `alx setup embeddings` 로 켤 수 있습니다',
+          : '꺼짐 — 켜면 표현이 달라도 찾을 수 있습니다',
+        fix: this.config.search.semantic && !embedProblem ? undefined : 'pnpm alx setup embeddings',
       },
       { name: `Vault (${this.config.vaultDir})`, ok: fs.existsSync(this.config.vaultDir) },
     ];

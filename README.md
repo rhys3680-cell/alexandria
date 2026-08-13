@@ -246,6 +246,27 @@ pnpm install
 pnpm build
 ```
 
+### CLI 실행 방법
+
+`alx` 는 워크스페이스 안에 설치되므로, 저장소 폴더에서 `pnpm` 을 통해 실행합니다.
+
+```bash
+pnpm alx doctor
+pnpm alx setup whisper
+```
+
+어디서나 `alx` 만으로 쓰고 싶다면 pnpm 의 전역 bin 폴더를 PATH 에 등록해야 합니다. 이 명령은 셸 설정을 바꾸므로 직접 실행하십시오.
+
+```bash
+pnpm setup                       # PATH 등록 (새 셸에서 적용)
+cd packages/cli && pnpm link --global
+```
+
+### 첫 실행에 필요한 것
+
+보관소는 기본적으로 `~/Alexandria` 입니다. 앱을 그냥 실행하면 이 폴더를 쓰므로, **개발용 보관소에 설치해 둔 것은 여기에 없습니다.** 준비 상태는 `pnpm alx doctor` 로 확인하고, 빠진 것이 있으면 앱 상단에도 필요한 명령과 함께 배너가 뜹니다.
+
+
 `claude` CLI가 PATH에 있고 로그인되어 있어야 합니다. 점검:
 
 ```bash

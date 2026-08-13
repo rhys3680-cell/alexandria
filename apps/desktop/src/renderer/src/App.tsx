@@ -98,6 +98,8 @@ export function App(): React.JSX.Element {
   );
 
   const failing = checks.filter((check) => !check.ok);
+  const [setupDismissed, setSetupDismissed] = useState(false);
+  const actionable = failing.filter((check) => check.fix);
 
   return (
     <div className="app" onDrop={(event) => void onDrop(event)} onDragOver={(event) => event.preventDefault()}>
@@ -140,6 +142,26 @@ export function App(): React.JSX.Element {
         <Recorder onCaptured={refresh} onNotice={showNotice} />
       </header>
 
+      {actionable.length && !setupDismissed ? (
+        <div className="setup-banner">
+          <div>
+            <strong>아직 준비되지 않은 기능이 있습니다.</strong>
+            <ul>
+              {actionable.map((check) => (
+                <li key={check.name}>
+                  {check.name.replace(/\s*\(.*\)/, '')} — {check.detail}
+                  <code>{check.fix}</code>
+                </li>
+              ))}
+            </ul>
+            <span className="dim">저장소 폴더에서 위 명령을 실행한 뒤 앱을 다시 시작하세요.</span>
+          </div>
+          <button className="link" onClick={() => setSetupDismissed(true)}>
+            닫기
+          </button>
+        </div>
+      ) : undefined}
+
       <main className="body">
         <section className="left">
           <Composer onCaptured={refresh} onNotice={showNotice} />
@@ -163,7 +185,12 @@ export function App(): React.JSX.Element {
               }}
             />
           ) : pane === 'console' ? (
-            <Console contextItem={selected} onSaved={refresh} onNotice={showNotice} />
+            <Console
+              contextItem={selected}
+              voiceReady={checks.some((check) => check.name.startsWith('STT') && check.ok)}
+              onSaved={refresh}
+              onNotice={showNotice}
+            />
           ) : selected ? (
             <ItemDetail
               item={selected}
@@ -504,10 +531,13 @@ const TOOL_MODES: { value: ToolAccess; label: string; hint: string }[] = [
 
 function Console({
   contextItem,
+  voiceReady,
   onSaved,
   onNotice,
 }: {
   contextItem: Item | undefined;
+  /** False until whisper is installed; the mic is disabled and says so. */
+  voiceReady: boolean;
   onSaved: () => Promise<void>;
   onNotice: (message: string) => void;
 }): React.JSX.Element {
@@ -685,8 +715,8 @@ function Console({
           <button
             className={listening ? 'chip listening' : 'chip'}
             onClick={() => (listening ? stopListening() : void startListening())}
-            disabled={transcribing || busy}
-            title="말로 물어보기"
+            disabled={transcribing || busy || !voiceReady}
+            title={voiceReady ? '말로 물어보기' : '음성 인식이 설치되지 않았습니다: pnpm alx setup whisper'}
           >
             {listening ? '■ 듣는 중' : transcribing ? '옮기는 중…' : '🎤 말하기'}
           </button>

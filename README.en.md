@@ -246,6 +246,27 @@ pnpm install
 pnpm build
 ```
 
+### Running the CLI
+
+`alx` is installed inside the workspace, so run it through `pnpm` from the repository folder.
+
+```bash
+pnpm alx doctor
+pnpm alx setup whisper
+```
+
+To use a bare `alx` from anywhere, pnpm's global bin directory has to be on PATH. That command edits your shell configuration, so run it yourself.
+
+```bash
+pnpm setup                       # adds it to PATH (takes effect in a new shell)
+cd packages/cli && pnpm link --global
+```
+
+### What a first run needs
+
+The vault defaults to `~/Alexandria`. Launching the app plain uses that folder, so **anything set up in a development vault is not there.** Check with `pnpm alx doctor`; if something is missing the app also shows a banner naming the command that fixes it.
+
+
 The `claude` CLI must be on PATH and signed in. Check with:
 
 ```bash

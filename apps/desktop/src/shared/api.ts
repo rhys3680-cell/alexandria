@@ -50,6 +50,8 @@ export interface DoctorCheck {
   name: string;
   ok: boolean;
   detail?: string;
+  /** Command that fixes it, when there is one. */
+  fix?: string;
 }
 
 /** The entire surface the renderer is allowed to touch. */
