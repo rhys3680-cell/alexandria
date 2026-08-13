@@ -14,6 +14,7 @@ Throw in a note or a recording and it comes back with a title, summary, tags, ac
 ~/Alexandria/
   items/2026/08/20260812T0413-alexandria-project-kickoff-6APQFA.md
   media/01KZT2T68XKNV763TNG96APQFA.webm
+  dictionary.txt      ← your recurring names and terms; meant to be edited
   .alexandria/
     config.json
     index.db          ← derived; `alx reindex` rebuilds it at any time
@@ -61,9 +62,31 @@ Measured on a 20-second Korean memo against a known transcript.
 
 **`base` transcribed English word for word but got a person's name wrong in Korean.** A wrong name flows straight into the item's `people` field, where nothing downstream can catch it. Wrong data is worse than slow data, so `small` is the default. If you only capture English, `base` is plenty.
 
+### A dictionary beats a bigger model
+
+Put your recurring names, product names and jargon in `dictionary.txt` at the vault root, one per line. Transcription is biased toward those terms, and the organizing pass uses them to repair misheard spellings.
+
+```bash
+alx dict add Alexandria "app deployment" 박서연
+alx dict                                    # show the current list
+```
+
+Measured on the same 20-second memo:
+
+| Model | Without dictionary | With dictionary | Time |
+|---|---|---|---|
+| `base` | 6 errors | **1 error** | 18.1s |
+| `small` | 2 errors | **0 errors** | 42.9s |
+
+Without it, `base` got both the person's name and the product name wrong; with it, five errors including the name were fixed at once. **`base` with a dictionary (18s) is more accurate than `small` without one (43s)** — if speed matters, the small model plus a dictionary is the better trade.
+
+The file is re-read on every run, so editing it by hand while the app is running is fine. To apply it to items already organized, requeue them with `alx retry`.
+
 ### Known limits
 
-The organizing pass recovers transcription errors only **sometimes**. Running the same audio through both models, one run recovered `애패포` into `앱 배포` ("app deployment") and the other left `에페포` sitting in the title. Names are stable from `small` upward, but a misheard common noun can still end up in a title or a tag.
+Misheard common words that are not in the dictionary still get through. The one error `base` had left was `만료되니까` → `말려드니까` — a verb, not a name.
+
+The organizing pass cannot be relied on to fix transcription errors **by itself**. Running the same audio through both models, one run recovered `애패포` into `앱 배포` ("app deployment") and the other left `에페포` sitting in the title. That is precisely why the dictionary exists.
 
 These numbers come from **clean TTS-generated speech**. Real recordings vary with noise and speaking habits.
 
@@ -220,6 +243,7 @@ alx setup embeddings                                 # enable semantic search
 alx embed                                            # fill in missing embeddings
 alx show 6APQFA                                      # detail (last 6 characters work as an id)
 alx related 6APQFA                                   # connected past records
+alx dict add Alexandria "app deployment"              # transcription dictionary
 alx stats                                            # status and accumulated cost
 alx reindex                                          # rebuild the index from the files
 alx retry                                            # requeue failed jobs
@@ -256,13 +280,12 @@ The renderer only sees the narrow API exposed over `contextBridge`. No database 
 pnpm test
 ```
 
-29 tests run against the built artifacts: frontmatter round-trips, filename normalisation, FTS query escaping, cross-lingual search, CJK trigram search, queue retries, task completion reaching the file, briefing due-date bucketing, rank fusion, vector storage, the relatedness floor, and the whole capture-to-organized path with the model and embedder stubbed.
+33 tests run against the built artifacts: frontmatter round-trips, filename normalisation, FTS query escaping, cross-lingual search, CJK trigram search, queue retries, task completion reaching the file, briefing due-date bucketing, rank fusion, vector storage, the relatedness floor, the dictionary reaching both whisper and the organize prompt, and the whole capture-to-organized path with the model and embedder stubbed.
 
 ## What's next
 
-Capture, organizing, briefing, search, related records and speech all work. Remaining:
+Capture, organizing, briefing, search, related records, speech and packaging all work. Remaining:
 
 - **Code signing** — the installer is unsigned today, so SmartScreen warns on first run
 - **Korean → non-Korean retrieval** — the one direction that consistently failed above
-- **Transcription correction** — feed a user dictionary of recurring names and product terms into the organizing prompt
 - **System audio capture** — pick up video call audio too
