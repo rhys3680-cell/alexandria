@@ -5,9 +5,14 @@ import path from 'node:path';
 import test from 'node:test';
 
 import {
+  addTerms,
   Alexandria,
   buildBriefing,
+  buildWhisperPrompt,
   claimNextJob,
+  dictionaryPath,
+  loadDictionary,
+  removeTerms,
   defaultConfig,
   embeddingCount,
   embeddingText,
@@ -105,6 +110,76 @@ test('the whisper binary is chosen by preference, not by directory order', () =>
   assert.equal(path.basename(findWhisperBinary(root)), `main${suffix}`, '없으면 예전 이름으로 내려간다');
 
   fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('the dictionary file round-trips and ignores comments', () => {
+  const vaultDir = fs.mkdtempSync(path.join(os.tmpdir(), 'alexandria-dict-'));
+  try {
+    assert.deepEqual(loadDictionary(vaultDir), [], '없으면 빈 목록');
+
+    addTerms(vaultDir, ['박서연', '알렉산드리아', '  앱 배포  ', '박서연']);
+    assert.deepEqual(loadDictionary(vaultDir), ['박서연', '알렉산드리아', '앱 배포'], '공백 정리, 중복 제거');
+
+    fs.appendFileSync(dictionaryPath(vaultDir), '\n# 주석은 무시\n\n베타 빌드\n', 'utf8');
+    assert.ok(loadDictionary(vaultDir).includes('베타 빌드'));
+    assert.ok(!loadDictionary(vaultDir).some((term) => term.startsWith('#')));
+
+    removeTerms(vaultDir, ['알렉산드리아']);
+    assert.ok(!loadDictionary(vaultDir).includes('알렉산드리아'));
+  } finally {
+    fs.rmSync(vaultDir, { recursive: true, force: true });
+  }
+});
+
+test('the whisper prompt drops whole terms rather than truncating one', () => {
+  const terms = ['박서연', '알렉산드리아', '앱 배포'];
+  assert.equal(buildWhisperPrompt(terms), '박서연, 알렉산드리아, 앱 배포');
+
+  // Budget fits the first term only; the second must be dropped entirely.
+  const clipped = buildWhisperPrompt(terms, 10);
+  assert.equal(clipped, '박서연');
+  assert.ok(clipped.length <= 10);
+  assert.equal(buildWhisperPrompt([], 100), '');
+});
+
+test('the dictionary reaches both whisper and the organize prompt', async () => {
+  const vaultDir = fs.mkdtempSync(path.join(os.tmpdir(), 'alexandria-test-'));
+  addTerms(vaultDir, ['박서연', '앱 배포']);
+
+  let seenPrompt;
+  let seenOrganizePrompt;
+  const transcriber = {
+    name: 'stub',
+    check: async () => null,
+    transcribe: async (_path, options) => {
+      seenPrompt = options?.prompt;
+      return { text: '박서현과 에페포 일정', language: 'ko', durationMs: 1000, segments: [{ start: 0, end: 1000, text: '박서현과 에페포 일정' }] };
+    },
+  };
+  const llm = {
+    name: 'stub',
+    check: async () => null,
+    complete: async (request) => {
+      seenOrganizePrompt = request.prompt;
+      return { text: JSON.stringify(ENGLISH_NOTE), model: 'stub', costUsd: 0, durationMs: 1 };
+    },
+  };
+
+  const audio = path.join(vaultDir, 'memo.wav');
+  fs.writeFileSync(audio, 'not really audio');
+
+  const alx = new Alexandria({ config: defaultConfig(vaultDir), llm, transcriber });
+  try {
+    alx.captureAudio({ filePath: audio, source: 'mic' });
+    await alx.processPending();
+
+    assert.equal(seenPrompt, '박서연, 앱 배포', 'whisper 초기 프롬프트로 전달');
+    assert.match(seenOrganizePrompt, /KNOWN TERMS/);
+    assert.match(seenOrganizePrompt, /박서연/);
+  } finally {
+    alx.close();
+    fs.rmSync(vaultDir, { recursive: true, force: true });
+  }
 });
 
 test('whisper output becomes text plus timed segments', () => {
