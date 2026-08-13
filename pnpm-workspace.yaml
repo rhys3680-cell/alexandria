@@ -2,6 +2,14 @@ packages:
   - 'packages/*'
   - 'apps/*'
 
+# electron-builder has to walk the production dependency tree to decide what
+# ships inside the app. pnpm's default symlinked layout puts a package's
+# dependencies in the store as siblings rather than inside the package, so that
+# walk either misses runtime deps or copies the entire workspace — it produced a
+# 700 MB app.asar full of devDependencies. A hoisted, npm-like node_modules is
+# what electron-builder expects.
+nodeLinker: hoisted
+
 allowBuilds:
   # Each of these needs its install script to fetch or place a platform binary.
   esbuild: true
@@ -12,3 +20,5 @@ allowBuilds:
   sharp: true
   # Only needed by the protobufjs CLI, which we do not run.
   protobufjs: false
+  # Squirrel packaging, which this project does not use — the target is NSIS.
+  electron-winstaller: false
