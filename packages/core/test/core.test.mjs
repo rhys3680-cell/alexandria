@@ -7,6 +7,8 @@ import test from 'node:test';
 import {
   addTerms,
   Alexandria,
+  buildAskPrompt,
+  buildAskSystemPrompt,
   buildBriefing,
   buildWhisperPrompt,
   claimNextJob,
@@ -596,6 +598,96 @@ test('with semantic search off nothing is embedded and search stays lexical', as
     assert.equal(alx.stats().semantic, false);
     assert.equal((await alx.search('데이터베이스 접근 분리', 10)).length, 0);
     assert.equal((await alx.search('sqlite', 10))[0].via, 'lexical');
+  } finally {
+    alx.close();
+    fs.rmSync(vaultDir, { recursive: true, force: true });
+  }
+});
+
+// -------------------------------------------------------------------- ask
+
+test('context items reach the prompt with their short ids', () => {
+  const item = makeItem({
+    id: '01TESTITEM0000000000ABCDEF',
+    title: '킥오프 회의',
+    summary: '일정을 정했다.',
+    tags: ['킥오프'],
+    people: ['김지훈'],
+    body: 'x'.repeat(3000),
+  });
+
+  const prompt = buildAskPrompt({ prompt: '뭘 정했지?', context: [item] });
+
+  assert.match(prompt, /보관소 항목 1개/);
+  assert.match(prompt, /\[ABCDEF\] 킥오프 회의/);
+  assert.match(prompt, /인물: 김지훈/);
+  assert.match(prompt, /이하 생략/, '긴 본문은 잘린다');
+  assert.ok(prompt.endsWith('뭘 정했지?'), '질문이 마지막에 온다');
+});
+
+test('a question without context carries no context block', () => {
+  const prompt = buildAskPrompt({ prompt: '2+2?' });
+  assert.equal(prompt, '2+2?');
+});
+
+test('the system prompt states the tools actually granted', () => {
+  assert.match(buildAskSystemPrompt('none'), /no tools/);
+  assert.match(buildAskSystemPrompt('web'), /Cite each claim/);
+  assert.match(buildAskSystemPrompt('vault'), /read files inside the vault/);
+});
+
+test('ask streams, passes tools through and returns the session for resuming', async () => {
+  const vaultDir = fs.mkdtempSync(path.join(os.tmpdir(), 'alexandria-test-'));
+  const seen = [];
+  const llm = {
+    name: 'stub',
+    check: async () => null,
+    complete: async () => {
+      throw new Error('스트리밍 경로를 써야 한다');
+    },
+    stream: async (request, onText) => {
+      seen.push(request);
+      onText('안녕');
+      onText('하세요');
+      return { text: '안녕하세요', model: 'stub', costUsd: 0.002, durationMs: 5, sessionId: 'sess-1' };
+    },
+  };
+
+  const alx = new Alexandria({ config: defaultConfig(vaultDir), llm });
+  try {
+    let streamed = '';
+    const first = await alx.ask({ prompt: '인사해줘', tools: 'web', onText: (t) => (streamed += t) });
+
+    assert.equal(streamed, '안녕하세요', '조각이 순서대로 전달된다');
+    assert.equal(first.text, '안녕하세요');
+    assert.equal(first.sessionId, 'sess-1');
+    assert.equal(seen[0].tools, 'web');
+    assert.equal(seen[0].persist, true, '이어가려면 세션이 남아야 한다');
+
+    await alx.ask({ prompt: '한 번 더', resume: first.sessionId, onText: () => {} });
+    assert.equal(seen[1].resume, 'sess-1');
+
+    await assert.rejects(() => alx.ask({ prompt: '   ' }), /빈 질문/);
+  } finally {
+    alx.close();
+    fs.rmSync(vaultDir, { recursive: true, force: true });
+  }
+});
+
+test('a saved answer keeps the question and is queued for organizing', async () => {
+  const vaultDir = fs.mkdtempSync(path.join(os.tmpdir(), 'alexandria-test-'));
+  const alx = new Alexandria({ config: defaultConfig(vaultDir), llm: stubLlm(ENGLISH_NOTE) });
+
+  try {
+    const item = alx.saveAnswer('whisper 최신 버전은?', 'v1.9.2 입니다.');
+
+    assert.equal(item.source, 'assistant');
+    assert.match(item.body, /whisper 최신 버전은\?/);
+    assert.match(item.body, /v1\.9\.2/);
+    assert.equal(alx.pendingCount(), 1, '다른 항목과 똑같이 정리 대기열로 간다');
+
+    await alx.processPending();
+    assert.equal(alx.get(item.id).status, 'organized');
   } finally {
     alx.close();
     fs.rmSync(vaultDir, { recursive: true, force: true });
