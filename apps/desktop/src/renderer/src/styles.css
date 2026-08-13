@@ -132,6 +132,11 @@ button:disabled {
   overflow-y: auto;
 }
 
+/* The console and the browser lay themselves out to the full pane height. */
+.right.fixed {
+  overflow: hidden;
+}
+
 /* ---------------------------------------------------------------- composer */
 
 .composer {
@@ -673,4 +678,66 @@ button:disabled {
 .cost {
   font-variant-numeric: tabular-nums;
   cursor: help;
+}
+
+/* ----------------------------------------------------------------- browser */
+
+.browser {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  height: 100%;
+  min-height: 0;
+  position: relative;
+}
+
+.browser-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.nav {
+  padding: 4px 10px;
+  min-width: 32px;
+  line-height: 1.2;
+}
+
+.address {
+  flex: 1;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  outline: none;
+}
+
+.address:focus {
+  border-color: var(--accent);
+}
+
+/*
+ * The page itself is a separate view painted over this rectangle by the main
+ * process, so this element stays empty on purpose — it exists to be measured.
+ */
+.browser-slot {
+  min-height: 0;
+  position: relative;
+}
+
+.browser-status {
+  position: absolute;
+  left: 12px;
+  bottom: 10px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--panel-alt);
+  border: 1px solid var(--line);
+  font-size: 11px;
+  color: var(--text-dim);
 }

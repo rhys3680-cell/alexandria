@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Briefing, BriefingTask, Item, RelatedHit, SearchHit, ToolAccess } from '@alexandria/core';
-import type { DoctorCheck, VaultStats } from '../../shared/api.js';
+import type { BrowserState, DoctorCheck, VaultStats } from '../../shared/api.js';
 
 const STATUS_LABEL: Record<string, string> = {
   raw: '대기',
@@ -20,7 +20,15 @@ export function App(): React.JSX.Element {
   const [briefing, setBriefing] = useState<Briefing | undefined>(undefined);
   const [checks, setChecks] = useState<DoctorCheck[]>([]);
   const [notice, setNotice] = useState<string | undefined>(undefined);
-  const [consoleOpen, setConsoleOpen] = useState(false);
+  const [pane, setPane] = useState<'auto' | 'console' | 'browser'>('auto');
+
+  // Selecting an item from a list should reveal it, so the browser — which
+  // floats over the whole pane — steps aside. The console does not, because
+  // the selection is what it offers as context.
+  const selectItem = useCallback((id: string) => {
+    setSelectedId(id);
+    setPane((current) => (current === 'browser' ? 'auto' : current));
+  }, []);
 
   const refresh = useCallback(async () => {
     const [nextItems, nextStats, nextBriefing] = await Promise.all([
@@ -96,9 +104,9 @@ export function App(): React.JSX.Element {
       <header className="header">
         <div className="brand">Alexandria</div>
         <button
-          className={!consoleOpen && !selected ? 'today active' : 'today'}
+          className={pane === 'auto' && !selected ? 'today active' : 'today'}
           onClick={() => {
-            setConsoleOpen(false);
+            setPane('auto');
             setSelectedId(undefined);
           }}
           title="오늘 챙길 것들"
@@ -109,11 +117,18 @@ export function App(): React.JSX.Element {
           ) : undefined}
         </button>
         <button
-          className={consoleOpen ? 'today active' : 'today'}
-          onClick={() => setConsoleOpen((open) => !open)}
+          className={pane === 'console' ? 'today active' : 'today'}
+          onClick={() => setPane((current) => (current === 'console' ? 'auto' : 'console'))}
           title="모델과 대화하기"
         >
           대화
+        </button>
+        <button
+          className={pane === 'browser' ? 'today active' : 'today'}
+          onClick={() => setPane((current) => (current === 'browser' ? 'auto' : 'browser'))}
+          title="앱 안에서 웹 보기"
+        >
+          웹
         </button>
         <input
           className="search"
@@ -132,17 +147,27 @@ export function App(): React.JSX.Element {
             items={visible}
             hits={hits}
             selectedId={selected?.id}
-            onSelect={setSelectedId}
+            onSelect={selectItem}
             searching={Boolean(hits)}
           />
         </section>
-        <section className="right">
-          {consoleOpen ? (
+        {/* The console and browser own their full height; only the reading views scroll. */}
+        <section className={pane === 'auto' ? 'right' : 'right fixed'}>
+          {pane === 'browser' ? (
+            <BrowserPanel
+              active
+              onNotice={showNotice}
+              onCaptured={async (item) => {
+                await refresh();
+                selectItem(item.id);
+              }}
+            />
+          ) : pane === 'console' ? (
             <Console contextItem={selected} onSaved={refresh} onNotice={showNotice} />
           ) : selected ? (
             <ItemDetail
               item={selected}
-              onOpen={setSelectedId}
+              onOpen={selectItem}
               onDeleted={async () => {
                 await window.alexandria.remove(selected.id);
                 setSelectedId(undefined);
@@ -150,7 +175,7 @@ export function App(): React.JSX.Element {
               }}
             />
           ) : briefing ? (
-            <BriefingView briefing={briefing} onOpen={setSelectedId} onToggleTask={toggleTask} />
+            <BriefingView briefing={briefing} onOpen={selectItem} onToggleTask={toggleTask} />
           ) : (
             <Empty />
           )}
@@ -335,6 +360,131 @@ function ItemList({
         </li>
       ))}
     </ul>
+  );
+}
+
+function BrowserPanel({
+  active,
+  onCaptured,
+  onNotice,
+}: {
+  active: boolean;
+  onCaptured: (item: Item) => Promise<void>;
+  onNotice: (message: string) => void;
+}): React.JSX.Element {
+  const [state, setState] = useState<BrowserState>({
+    url: '',
+    title: '',
+    canGoBack: false,
+    canGoForward: false,
+    loading: false,
+  });
+  const [address, setAddress] = useState('');
+  const [capturing, setCapturing] = useState(false);
+  const [edited, setEdited] = useState(false);
+  const slotRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => window.alexandria.onBrowserState(setState), []);
+
+  // The address bar follows the page unless the user is mid-edit.
+  useEffect(() => {
+    if (!edited) setAddress(state.url);
+  }, [state.url, edited]);
+
+  // The page is a separate view floating over this pane, so its rectangle has
+  // to be reported whenever this slot moves or resizes.
+  useEffect(() => {
+    const slot = slotRef.current;
+    if (!slot) return;
+
+    if (!active) {
+      void window.alexandria.browserDetach();
+      return;
+    }
+
+    const report = () => {
+      const rect = slot.getBoundingClientRect();
+      void window.alexandria.browserAttach({
+        x: rect.left,
+        y: rect.top,
+        width: rect.width,
+        height: rect.height,
+      });
+    };
+
+    report();
+    const observer = new ResizeObserver(report);
+    observer.observe(slot);
+    window.addEventListener('resize', report);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', report);
+      void window.alexandria.browserDetach();
+    };
+  }, [active]);
+
+  const go = () => {
+    if (!address.trim()) return;
+    setEdited(false);
+    void window.alexandria.browserNavigate(address);
+  };
+
+  const capture = async () => {
+    setCapturing(true);
+    try {
+      const item = await window.alexandria.browserCapture();
+      onNotice('페이지를 보관소에 담았습니다. 정리는 백그라운드에서 진행됩니다.');
+      await onCaptured(item);
+    } catch (error) {
+      onNotice(`캡처 실패: ${(error as Error).message}`);
+    } finally {
+      setCapturing(false);
+    }
+  };
+
+  return (
+    <div className="browser">
+      <div className="browser-bar">
+        <button className="nav" disabled={!state.canGoBack} onClick={() => void window.alexandria.browserBack()}>
+          ←
+        </button>
+        <button className="nav" disabled={!state.canGoForward} onClick={() => void window.alexandria.browserForward()}>
+          →
+        </button>
+        <button className="nav" onClick={() => void window.alexandria.browserReload()} title="새로고침">
+          ↻
+        </button>
+        <input
+          className="address"
+          value={address}
+          placeholder="주소 또는 검색어"
+          onChange={(event) => {
+            setAddress(event.target.value);
+            setEdited(true);
+          }}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') go();
+          }}
+        />
+        <button onClick={() => void capture()} disabled={!state.url || capturing}>
+          {capturing ? '담는 중…' : '보관소에 담기'}
+        </button>
+      </div>
+
+      <div className="browser-slot" ref={slotRef}>
+        {!state.url ? (
+          <div className="placeholder">
+            <p>주소를 입력하거나 검색어를 넣으세요.</p>
+            <p className="dim">
+              보고 있는 페이지를 그대로 보관소에 담을 수 있습니다. 로그인이 필요한 페이지도 화면에 보이는 대로
+              담기므로, URL 만 가져오는 방식으로는 못 읽는 것도 기록으로 남습니다.
+            </p>
+          </div>
+        ) : undefined}
+      </div>
+
+      {state.loading ? <div className="browser-status">불러오는 중…</div> : undefined}
+    </div>
   );
 }
 
