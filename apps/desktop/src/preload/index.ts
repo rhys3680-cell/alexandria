@@ -12,6 +12,7 @@ import {
   IPC,
   type AlexandriaApi,
   type AskChunk,
+  type BrowserState,
   type DoctorCheck,
   type VaultStats,
 } from '../shared/api.js';
@@ -33,6 +34,16 @@ const api: AlexandriaApi = {
   remove: (id) => ipcRenderer.invoke(IPC.remove, id) as Promise<boolean>,
 
   related: (id, limit) => ipcRenderer.invoke(IPC.related, id, limit) as Promise<RelatedHit[]>,
+
+  browserAttach: (bounds) => ipcRenderer.invoke(IPC.browserAttach, bounds) as Promise<void>,
+  browserDetach: () => ipcRenderer.invoke(IPC.browserDetach) as Promise<void>,
+  browserNavigate: (input) => ipcRenderer.invoke(IPC.browserNavigate, input) as Promise<void>,
+  browserBack: () => ipcRenderer.invoke(IPC.browserBack) as Promise<void>,
+  browserForward: () => ipcRenderer.invoke(IPC.browserForward) as Promise<void>,
+  browserReload: () => ipcRenderer.invoke(IPC.browserReload) as Promise<void>,
+  browserCapture: () => ipcRenderer.invoke(IPC.browserCapture) as Promise<Item>,
+  onBrowserState: (listener) =>
+    subscribe(IPC.browserState, (_event, payload) => listener(payload as BrowserState)),
 
   ask: (request) => ipcRenderer.invoke(IPC.ask, request) as Promise<AskResult>,
   saveAnswer: (question, answer) => ipcRenderer.invoke(IPC.saveAnswer, question, answer) as Promise<Item>,

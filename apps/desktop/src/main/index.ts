@@ -11,12 +11,22 @@ import {
   type ListOptions,
   type PipelineEvent,
 } from '@alexandria/core';
-import { IPC, type AskRequest } from '../shared/api.js';
+import { InAppBrowser } from './browser.js';
+import { IPC, type AskRequest, type BrowserBounds } from '../shared/api.js';
 
 const isDev = !app.isPackaged;
 
 let alexandria: Alexandria | undefined;
 let mainWindow: BrowserWindow | undefined;
+let inAppBrowser: InAppBrowser | undefined;
+
+function browser(): InAppBrowser {
+  if (!inAppBrowser) {
+    if (!mainWindow) throw new Error('창이 아직 준비되지 않았습니다.');
+    inAppBrowser = new InAppBrowser(mainWindow, (state) => broadcast(IPC.browserState, state));
+  }
+  return inAppBrowser;
+}
 
 function vault(): Alexandria {
   if (!alexandria) throw new Error('보관소가 아직 열리지 않았습니다.');
@@ -140,6 +150,29 @@ function registerIpc(): void {
 
   ipcMain.handle(IPC.related, async (_event, id: string, limit?: number) => vault().related(id, limit));
 
+  ipcMain.handle(IPC.browserAttach, async (_event, bounds: BrowserBounds) => browser().attach(bounds));
+  ipcMain.handle(IPC.browserDetach, async () => browser().detach());
+  ipcMain.handle(IPC.browserNavigate, async (_event, input: string) => browser().navigate(input));
+  ipcMain.handle(IPC.browserBack, async () => browser().back());
+  ipcMain.handle(IPC.browserForward, async () => browser().forward());
+  ipcMain.handle(IPC.browserReload, async () => browser().reload());
+
+  ipcMain.handle(IPC.browserCapture, async () => {
+    const page = await browser().capture();
+    if (!page.text.trim()) throw new Error('페이지에서 읽을 수 있는 글이 없습니다.');
+
+    // The page title leads so the organize pass has something to work with even
+    // when the body is mostly boilerplate.
+    const item = vault().captureText({
+      text: `# ${page.title}\n\n${page.url}\n\n${page.text}`,
+      source: 'web',
+      sourceRef: page.url,
+    });
+    broadcast(IPC.changed);
+    void drainQueue();
+    return item;
+  });
+
   ipcMain.handle(IPC.ask, async (event, request: AskRequest) => {
     const context = (request.contextIds ?? [])
       .map((id) => vault().get(id))
@@ -215,6 +248,8 @@ if (!app.requestSingleInstanceLock()) {
   });
 
   app.on('before-quit', () => {
+    inAppBrowser?.destroy();
+    inAppBrowser = undefined;
     alexandria?.close();
     alexandria = undefined;
   });

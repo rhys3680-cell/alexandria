@@ -25,6 +25,21 @@ export interface AskChunk {
   text: string;
 }
 
+export interface BrowserBounds {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface BrowserState {
+  url: string;
+  title: string;
+  canGoBack: boolean;
+  canGoForward: boolean;
+  loading: boolean;
+}
+
 export interface VaultStats {
   byStatus: Record<string, number>;
   pending: number;
@@ -53,6 +68,20 @@ export interface AlexandriaApi {
 
   /** Past records connected to this one, with the reason for each link. */
   related(id: string, limit?: number): Promise<RelatedHit[]>;
+
+  /**
+   * The in-app browser lives above the renderer, so the React side reports
+   * where its viewport should sit and the main process draws it there.
+   */
+  browserAttach(bounds: BrowserBounds): Promise<void>;
+  browserDetach(): Promise<void>;
+  browserNavigate(input: string): Promise<void>;
+  browserBack(): Promise<void>;
+  browserForward(): Promise<void>;
+  browserReload(): Promise<void>;
+  /** Captures the rendered page into the vault and returns the new item. */
+  browserCapture(): Promise<Item>;
+  onBrowserState(listener: (state: BrowserState) => void): () => void;
 
   /** Sends a turn to the model. Text arrives through `onAskChunk` meanwhile. */
   ask(request: AskRequest): Promise<AskResult>;
@@ -87,6 +116,14 @@ export const IPC = {
   get: 'items:get',
   remove: 'items:remove',
   related: 'items:related',
+  browserAttach: 'browser:attach',
+  browserDetach: 'browser:detach',
+  browserNavigate: 'browser:navigate',
+  browserBack: 'browser:back',
+  browserForward: 'browser:forward',
+  browserReload: 'browser:reload',
+  browserCapture: 'browser:capture',
+  browserState: 'browser:state',
   ask: 'ask:send',
   askChunk: 'ask:chunk',
   saveAnswer: 'ask:save',
