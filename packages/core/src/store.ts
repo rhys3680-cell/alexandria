@@ -195,6 +195,17 @@ export function embeddingCount(db: Database, model: string): number {
   return Number(row?.n ?? 0);
 }
 
+/**
+ * Finds an item by where it came from.
+ *
+ * Bulk import needs this: a second run over the same folder must skip what it
+ * already took rather than making a duplicate of every file.
+ */
+export function findBySourceRef(db: Database, sourceRef: string): Item | undefined {
+  const row = db.prepare(`select ${ITEM_COLUMNS} from items where source_ref = ? limit 1`).get(sourceRef);
+  return row ? rowToItem(row) : undefined;
+}
+
 export function getItem(db: Database, id: string): Item | undefined {
   const row = db.prepare(`select ${ITEM_COLUMNS} from items where id = ?`).get(id);
   return row ? rowToItem(row) : undefined;

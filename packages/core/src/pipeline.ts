@@ -175,6 +175,11 @@ export class Alexandria {
     return written;
   }
 
+  /** True when this exact file has already been taken in. */
+  alreadyImported(filePath: string): boolean {
+    return store.findBySourceRef(this.db, filePath) !== undefined;
+  }
+
   /** Dispatches a dropped or watched file by extension. */
   captureFile(filePath: string, source: ItemSource = 'file'): Item {
     const extension = path.extname(filePath).toLowerCase();

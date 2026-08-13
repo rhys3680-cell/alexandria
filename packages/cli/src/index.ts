@@ -33,6 +33,7 @@ import {
   guessLanguage,
   type WhisperModel,
 } from '@alexandria/core';
+import { estimate, formatBytes as formatFileSize, formatDuration, planImport } from './import.js';
 import {
   color,
   endProgressLine,
@@ -156,6 +157,90 @@ program
       }
     });
   });
+
+// ----------------------------------------------------------------- import
+
+program
+  .command('import <dirs...>')
+  .description('폴더를 훑어 기존 파일을 한 번에 가져옵니다 (기본은 계획만 출력)')
+  .option('--yes', '실제로 가져옵니다')
+  .option('--limit <count>', '이번에 가져올 최대 개수', (value) => Number.parseInt(value, 10))
+  .option('--text-only', '오디오·영상은 건너뜁니다')
+  .option('--now', '가져온 뒤 곧바로 전사·정리까지 실행')
+  .action(
+    async (
+      dirs: string[],
+      options: { yes?: boolean; limit?: number; textOnly?: boolean; now?: boolean },
+    ) => {
+      await withVault(async (alx) => {
+        const plan = planImport(alx, dirs);
+        const selected = (options.textOnly
+          ? plan.candidates.filter((candidate) => candidate.kind === 'text')
+          : plan.candidates
+        ).slice(0, options.limit ?? Number.POSITIVE_INFINITY);
+
+        const scoped = { ...plan, candidates: selected };
+        const cost = estimate({
+          ...scoped,
+          audioBytes: selected
+            .filter((candidate) => candidate.kind === 'audio')
+            .reduce((sum, candidate) => sum + candidate.bytes, 0),
+        });
+
+        console.log(`${color.bold('가져올 파일')}  ${selected.length}건 · ${formatFileSize(
+          selected.reduce((sum, candidate) => sum + candidate.bytes, 0),
+        )}`);
+        console.log(
+          color.dim(
+            `  글 ${selected.filter((c) => c.kind === 'text').length}건 · ` +
+              `오디오/영상 ${selected.filter((c) => c.kind === 'audio').length}건`,
+          ),
+        );
+        if (plan.skipped) console.log(color.dim(`  이미 가져온 파일 ${plan.skipped}건은 건너뜁니다.`));
+
+        console.log('');
+        console.log(`${color.bold('예상')}`);
+        console.log(`  정리 비용 환산  ${color.yellow('$' + cost.costUsd.toFixed(2))}`);
+        if (cost.transcribeMinutes > 0) {
+          console.log(`  전사 시간       ${color.yellow(formatDuration(cost.transcribeMinutes))}`);
+          console.log(`  보관소 증가     ${color.yellow(formatFileSize(cost.vaultGrowthBytes))} (원본이 복사됩니다)`);
+        }
+
+        if (!selected.length) {
+          console.log(color.dim('\n가져올 것이 없습니다.'));
+          return;
+        }
+
+        if (!options.yes) {
+          console.log(color.dim('\n계획만 보여드렸습니다. 실제로 가져오려면 --yes 를 붙이세요.'));
+          console.log(color.dim('  큰 폴더라면 --limit 20 으로 먼저 시험해 보시길 권합니다.'));
+          return;
+        }
+
+        console.log('');
+        let taken = 0;
+        for (const candidate of selected) {
+          try {
+            alx.captureFile(candidate.file, 'file');
+            taken++;
+            progressLine(color.dim(`  가져오는 중 ${taken}/${selected.length}  ${path.basename(candidate.file)}`));
+          } catch (error) {
+            endProgressLine();
+            console.error(`  ${color.red('건너뜀')}  ${path.basename(candidate.file)}: ${describeError(error)}`);
+          }
+        }
+        endProgressLine();
+        console.log(`${color.green('가져옴')}  ${taken}건`);
+
+        if (options.now) {
+          console.log('');
+          await runQueue(alx, {});
+        } else {
+          console.log(color.dim(`대기 작업 ${alx.pendingCount()}건. 'alx run --follow' 로 처리하세요.`));
+        }
+      });
+    },
+  );
 
 // ------------------------------------------------------------------ watch
 

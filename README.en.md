@@ -367,6 +367,33 @@ alx retry                                            # requeue failed jobs
 alx config set llm.model haiku                       # change settings
 ```
 
+## Bulk-importing what you already have
+
+`alx watch` only sees files that appear after it starts. For a folder that is already full, use `alx import`.
+
+```bash
+alx import "D:/archive"                   # prints the plan only (the default)
+alx import "D:/archive" --limit 20 --yes  # try 20 first
+alx import "D:/archive" --yes             # all of it
+alx run --follow                          # keep draining transcription and organizing
+```
+
+Printing the plan first is the default for a reason: at a few hundred files the organizing cost and transcription time stop being incidental, so the numbers belong in front of you before anything starts.
+
+```
+가져올 파일  128건 · 296.0 MB
+  글 96건 · 오디오/영상 32건
+
+예상
+  정리 비용 환산  $1.54
+  전사 시간       약 4.2시간
+  보관소 증가     280.0 MB (원본이 복사됩니다)
+```
+
+- **Re-running over the same folder is safe.** Anything already taken in is recognised by its source path and skipped.
+- **Audio and video are copied into the vault**, because the vault is the source of truth — which costs disk. `--text-only` takes just the writing first.
+- **Which extensions count is configuration.** By default text is `.md .txt .markdown` and audio/video is `.wav .mp3 .m4a .ogg .flac .webm .mp4`. **PDF, docx, pptx and images are not supported yet.**
+
 ## How work flows
 
 Capture must never fail, so the file is written first and the slow work is queued.
