@@ -25,6 +25,7 @@ import {
   type PipelineEvent,
 } from '@alexandria/core';
 import { InAppBrowser } from './browser.js';
+import { registerMediaScheme, serveMedia } from './media.js';
 import { IPC, type AskRequest, type BrowserBounds, type DeepPartial, type SetupProgress } from '../shared/api.js';
 
 const isDev = !app.isPackaged;
@@ -345,12 +346,21 @@ function registerIpc(): void {
   ipcMain.handle(IPC.revealVault, async () => {
     await shell.openPath(vault().config.vaultDir);
   });
+
+  ipcMain.handle(IPC.revealItemFile, async (_event, relativePath: string) => {
+    // showItemInFolder selects the file, which is what "where is my recording?"
+    // actually asks for.
+    shell.showItemInFolder(path.resolve(vault().config.vaultDir, relativePath));
+  });
   ipcMain.handle(IPC.processNow, async () => {
     await drainQueue();
   });
 }
 
 // ------------------------------------------------------------------ launch
+
+// Privileged schemes have to be declared before the app is ready.
+registerMediaScheme();
 
 // A second instance would open the same SQLite file and fight over the queue.
 if (!app.requestSingleInstanceLock()) {
@@ -364,6 +374,7 @@ if (!app.requestSingleInstanceLock()) {
 
   void app.whenReady().then(() => {
     alexandria = Alexandria.open(undefined, { logger: createLogger(isDev ? 'debug' : 'warn') });
+    serveMedia(alexandria.config.vaultDir);
     registerIpc();
     createWindow();
     void drainQueue();

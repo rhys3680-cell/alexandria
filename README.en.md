@@ -62,6 +62,12 @@ Measured on a 20-second Korean memo against a known transcript.
 
 **`base` transcribed English word for word but got a person's name wrong in Korean.** A wrong name flows straight into the item's `people` field, where nothing downstream can catch it. Wrong data is worse than slow data, so `small` is the default. If you only capture English, `base` is plenty.
 
+### A recording can always be played back
+
+Opening an item shows a player above the transcript. That matters most **when transcription failed or is still queued** — hearing it is the only way to know whether anything was captured at all. The file path and a "reveal in folder" action sit alongside it.
+
+The renderer is never given filesystem access, so playback goes through a dedicated scheme (`alx-media://`) that serves the vault's `media/` folder and refuses any path escaping it.
+
 ### A dictionary beats a bigger model
 
 Put your recurring names, product names and jargon in `dictionary.txt` at the vault root, one per line. Transcription is biased toward those terms, and the organizing pass uses them to repair misheard spellings.

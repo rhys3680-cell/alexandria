@@ -392,7 +392,7 @@ function ItemList({
             <span className="date">{formatDate(item.created)}</span>
             {item.media ? <span className="mic">♪</span> : undefined}
           </div>
-          <div className="title">{item.title ?? firstLine(item.body) ?? '(내용 없음)'}</div>
+          <div className="title">{itemLabel(item)}</div>
           {snippetFor(item.id) ? (
             <div className="snippet">{stripMarks(snippetFor(item.id) ?? '')}</div>
           ) : item.summary ? (
@@ -998,7 +998,7 @@ function ItemDetail({
   const [editing, setEditing] = useState(false);
   return (
     <article className="detail">
-      <h1>{item.title ?? '(정리 전)'}</h1>
+      <h1>{item.title ?? (item.media ? '녹음' : '(정리 전)')}</h1>
       <div className="meta">
         <span>{formatDate(item.created)}</span>
         <span>{STATUS_LABEL[item.status] ?? item.status}</span>
@@ -1006,6 +1006,21 @@ function ItemDetail({
         {item.lang ? <span>{item.lang}</span> : undefined}
         {item.durationMs ? <span>{formatSeconds(Math.round(item.durationMs / 1000))}</span> : undefined}
       </div>
+
+      {item.media ? (
+        <section className="recording">
+          {/* Placed above the transcript on purpose: when transcription fails
+              or is still queued, hearing the audio is the only way to know
+              whether anything was recorded at all. */}
+          <audio controls preload="metadata" src={window.alexandria.mediaUrl(item.media)} />
+          <div className="recording-meta">
+            <code>{item.media}</code>
+            <button className="link" onClick={() => void window.alexandria.revealItemFile(item.media!)}>
+              폴더에서 보기
+            </button>
+          </div>
+        </section>
+      ) : undefined}
 
       {item.error ? <p className="error">{item.error}</p> : undefined}
       {item.summary ? <p className="summary">{item.summary}</p> : undefined}
@@ -1104,6 +1119,16 @@ function formatBriefingDate(isoDate: string): string {
 
 function formatSeconds(total: number): string {
   return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
+}
+
+/** What to call an item before organizing has given it a title. */
+function itemLabel(item: Item): string {
+  if (item.title) return item.title;
+  const line = firstLine(item.body);
+  if (line) return line;
+  // A recording with no transcript yet is not "empty" — say what it is.
+  if (item.media) return item.status === 'failed' ? '녹음 (전사 실패)' : '녹음 (전사 대기)';
+  return '(내용 없음)';
 }
 
 function firstLine(text: string): string | undefined {

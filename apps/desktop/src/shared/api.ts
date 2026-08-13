@@ -146,6 +146,10 @@ export interface AlexandriaApi {
   doctor(): Promise<DoctorCheck[]>;
   vaultPath(): Promise<string>;
   revealVault(): Promise<void>;
+  /** Opens the OS file manager with this vault-relative file selected. */
+  revealItemFile(relativePath: string): Promise<void>;
+  /** Playable URL for an item's recording. */
+  mediaUrl(relativePath: string): string;
 
   /** Nudges the background worker; it also runs on its own. */
   processNow(): Promise<void>;
@@ -195,6 +199,7 @@ export const IPC = {
   doctor: 'vault:doctor',
   vaultPath: 'vault:path',
   revealVault: 'vault:reveal',
+  revealItemFile: 'vault:reveal-file',
   processNow: 'queue:process',
   pipelineEvent: 'queue:event',
   changed: 'items:changed',

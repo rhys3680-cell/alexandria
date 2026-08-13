@@ -9,6 +9,7 @@ import type {
   RelatedHit,
   SearchHit,
 } from '@alexandria/core';
+import { mediaUrl } from '../shared/media.js';
 import {
   IPC,
   type AlexandriaApi,
@@ -75,6 +76,8 @@ const api: AlexandriaApi = {
   doctor: () => ipcRenderer.invoke(IPC.doctor) as Promise<DoctorCheck[]>,
   vaultPath: () => ipcRenderer.invoke(IPC.vaultPath) as Promise<string>,
   revealVault: () => ipcRenderer.invoke(IPC.revealVault) as Promise<void>,
+  revealItemFile: (relativePath) => ipcRenderer.invoke(IPC.revealItemFile, relativePath) as Promise<void>,
+  mediaUrl,
   processNow: () => ipcRenderer.invoke(IPC.processNow) as Promise<void>,
 
   onPipelineEvent: (listener) => subscribe(IPC.pipelineEvent, (_event, payload) => listener(payload as PipelineEvent)),

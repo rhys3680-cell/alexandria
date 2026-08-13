@@ -167,6 +167,60 @@ test('capturing a note runs it through the pipeline into the list', async () => 
   await page.screenshot({ path: path.join(SHOTS, '04-captured.png') });
 });
 
+test('a recording can be played back from its item', async () => {
+  // Goes through the app's own capture path rather than seeding files: an item
+  // written straight to disk is invisible to the index, and this also mirrors
+  // the case that matters — transcription unavailable, but the audio still has
+  // to be checkable.
+  const source = path.join(vaultDir, 'seed-recording.wav');
+  fs.writeFileSync(source, buildSilentWav(0.4));
+
+  await page.locator('.header button[title="오늘 챙길 것들"]').click();
+  await page.evaluate(async (file) => {
+    await window.alexandria.captureFiles([file]);
+  }, source);
+
+  const first = page.locator('.list li').first();
+  await expect(first).toBeVisible({ timeout: 15_000 });
+  await first.click();
+
+  const audio = page.locator('.recording audio');
+  await expect(audio).toBeVisible();
+
+  // readyState >= 1 means metadata arrived, i.e. the scheme actually served the
+  // file. A player that renders but cannot fetch its source looks identical.
+  await expect
+    .poll(async () => audio.evaluate((element: HTMLAudioElement) => element.readyState), { timeout: 10_000 })
+    .toBeGreaterThanOrEqual(1);
+
+  const duration = await audio.evaluate((element: HTMLAudioElement) => element.duration);
+  expect(duration).toBeGreaterThan(0.2);
+
+  await page.screenshot({ path: path.join(SHOTS, '06-recording.png') });
+});
+
+/** A tiny valid PCM wav, so the player has something real to decode. */
+function buildSilentWav(seconds: number): Buffer {
+  const rate = 8000;
+  const samples = Math.floor(rate * seconds);
+  const data = Buffer.alloc(samples * 2);
+  const header = Buffer.alloc(44);
+  header.write('RIFF', 0);
+  header.writeUInt32LE(36 + data.length, 4);
+  header.write('WAVE', 8);
+  header.write('fmt ', 12);
+  header.writeUInt32LE(16, 16);
+  header.writeUInt16LE(1, 20);
+  header.writeUInt16LE(1, 22);
+  header.writeUInt32LE(rate, 24);
+  header.writeUInt32LE(rate * 2, 28);
+  header.writeUInt16LE(2, 32);
+  header.writeUInt16LE(16, 34);
+  header.write('data', 36);
+  header.writeUInt32LE(data.length, 40);
+  return Buffer.concat([header, data]);
+}
+
 test('closing the window with the browser open shuts down cleanly', async () => {
   // The exact path that crashed: the in-app browser is attached, the window is
   // closed, and `before-quit` then tears the browser down after the window has
