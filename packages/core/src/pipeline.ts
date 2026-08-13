@@ -305,6 +305,8 @@ export class Alexandria {
       lang: result.language ?? working.lang,
       durationMs: result.durationMs,
       status: 'transcribed',
+      // A retry that succeeds must not keep the previous failure's message.
+      error: undefined,
       updated: nowIso(),
     });
     store.upsertItem(this.db, transcribed);
@@ -552,6 +554,17 @@ export class Alexandria {
     }
     this.logger.info('항목 수정', { id, fields: Object.keys(pickDefined(patch)) });
     return written;
+  }
+
+  /**
+   * Queues transcription again — after installing whisper, or adding the terms
+   * that were missing the first time.
+   */
+  retranscribe(id: string): boolean {
+    const item = store.getItem(this.db, id);
+    if (!item?.media) return false;
+    enqueueJob(this.db, id, 'transcribe');
+    return true;
   }
 
   /** Queues the organize pass again — after a dictionary change, for instance. */

@@ -1015,9 +1015,22 @@ function ItemDetail({
           <audio controls preload="metadata" src={window.alexandria.mediaUrl(item.media)} />
           <div className="recording-meta">
             <code>{item.media}</code>
-            <button className="link" onClick={() => void window.alexandria.revealItemFile(item.media!)}>
-              폴더에서 보기
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                className="link"
+                title="whisper 를 설치했거나 사전을 고친 뒤 다시 받아쓰게 합니다"
+                onClick={async () => {
+                  await window.alexandria.retranscribe(item.id);
+                  onNotice('전사를 다시 대기열에 넣었습니다.');
+                  await onChanged();
+                }}
+              >
+                전사 다시 시도
+              </button>
+              <button className="link" onClick={() => void window.alexandria.revealItemFile(item.media!)}>
+                폴더에서 보기
+              </button>
+            </div>
           </div>
         </section>
       ) : undefined}

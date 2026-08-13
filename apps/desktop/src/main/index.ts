@@ -176,6 +176,15 @@ function registerIpc(): void {
     return updated;
   });
 
+  ipcMain.handle(IPC.retranscribe, async (_event, id: string) => {
+    const queued = vault().retranscribe(id);
+    if (queued) {
+      broadcast(IPC.changed);
+      void drainQueue();
+    }
+    return queued;
+  });
+
   ipcMain.handle(IPC.reorganize, async (_event, id: string) => {
     const queued = vault().reorganize(id);
     if (queued) {

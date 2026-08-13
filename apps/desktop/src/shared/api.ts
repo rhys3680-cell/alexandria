@@ -92,6 +92,8 @@ export interface AlexandriaApi {
   updateItem(id: string, patch: ItemPatch): Promise<Item | undefined>;
   /** Queues the organize pass again. */
   reorganize(id: string): Promise<boolean>;
+  /** Queues transcription again, for an item that has a recording. */
+  retranscribe(id: string): Promise<boolean>;
 
   /** Past records connected to this one, with the reason for each link. */
   related(id: string, limit?: number): Promise<RelatedHit[]>;
@@ -171,6 +173,7 @@ export const IPC = {
   related: 'items:related',
   updateItem: 'items:update',
   reorganize: 'items:reorganize',
+  retranscribe: 'items:retranscribe',
   browserAttach: 'browser:attach',
   browserDetach: 'browser:detach',
   browserNavigate: 'browser:navigate',

@@ -66,6 +66,8 @@ Measured on a 20-second Korean memo against a known transcript.
 
 Opening an item shows a player above the transcript. That matters most **when transcription failed or is still queued** — hearing it is the only way to know whether anything was captured at all. The file path and a "reveal in folder" action sit alongside it.
 
+Next to the player is **retry transcription**, for when whisper was installed later or a name was added to the dictionary. A successful retry also clears the earlier failure message.
+
 The renderer is never given filesystem access, so playback goes through a dedicated scheme (`alx-media://`) that serves the vault's `media/` folder and refuses any path escaping it.
 
 ### A dictionary beats a bigger model
@@ -407,7 +409,7 @@ The renderer only sees the narrow API exposed over `contextBridge`. No database 
 ## Tests
 
 ```bash
-pnpm test                                   # 45 core tests
+pnpm test                                   # 47 core tests
 pnpm --filter @alexandria/desktop e2e       # Electron e2e (Playwright)
 ```
 
@@ -418,7 +420,7 @@ For Electron, Playwright drives the real app, clicks through it and writes scree
 pnpm test
 ```
 
-45 tests run against the built artifacts: frontmatter round-trips, filename normalisation, FTS query escaping, cross-lingual search, CJK trigram search, queue retries, task completion reaching the file, briefing due-date bucketing, rank fusion, vector storage, the relatedness floor, the dictionary reaching both whisper and the organize prompt, context injection and session resume for the console, and the whole capture-to-organized path with the model and embedder stubbed.
+47 tests run against the built artifacts: frontmatter round-trips, filename normalisation, FTS query escaping, cross-lingual search, CJK trigram search, queue retries, task completion reaching the file, briefing due-date bucketing, rank fusion, vector storage, the relatedness floor, the dictionary reaching both whisper and the organize prompt, context injection and session resume for the console, and the whole capture-to-organized path with the model and embedder stubbed.
 
 ## What's next
 

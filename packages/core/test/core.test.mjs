@@ -757,6 +757,63 @@ test('retitling renames the file and drops the old one', async () => {
   }
 });
 
+test('retranscribe requeues audio and clears the earlier failure', async () => {
+  const vaultDir = fs.mkdtempSync(path.join(os.tmpdir(), 'alexandria-test-'));
+  let broken = true;
+  const transcriber = {
+    name: 'stub',
+    check: async () => null,
+    transcribe: async () => {
+      if (broken) throw new Error('whisper-cli 실행 파일이 설정되지 않았습니다.');
+      return {
+        text: '다시 받아쓴 내용',
+        language: 'ko',
+        durationMs: 1200,
+        segments: [{ start: 0, end: 1200, text: '다시 받아쓴 내용' }],
+      };
+    },
+  };
+
+  const audio = path.join(vaultDir, 'memo.wav');
+  fs.writeFileSync(audio, 'not really audio');
+
+  const alx = new Alexandria({ config: defaultConfig(vaultDir), llm: stubLlm(KICKOFF), transcriber });
+  try {
+    const captured = alx.captureAudio({ filePath: audio, source: 'mic' });
+    await alx.processPending();
+
+    const failed = alx.get(captured.id);
+    assert.equal(failed.status, 'failed');
+    assert.match(failed.error, /whisper-cli/);
+
+    // whisper is installed now, which is exactly when this button gets pressed.
+    broken = false;
+    assert.equal(alx.retranscribe(captured.id), true);
+    await alx.processPending();
+
+    const fixed = alx.get(captured.id);
+    assert.equal(fixed.status, 'organized', '전사 후 정리까지 이어진다');
+    assert.match(fixed.body, /다시 받아쓴 내용/);
+    assert.equal(fixed.error, undefined, '이전 실패 메시지가 남지 않는다');
+  } finally {
+    alx.close();
+    fs.rmSync(vaultDir, { recursive: true, force: true });
+  }
+});
+
+test('retranscribe refuses an item without a recording', async () => {
+  const vaultDir = fs.mkdtempSync(path.join(os.tmpdir(), 'alexandria-test-'));
+  const alx = new Alexandria({ config: defaultConfig(vaultDir), llm: stubLlm(KICKOFF) });
+  try {
+    const captured = alx.captureText({ text: '녹음이 아닌 메모' });
+    assert.equal(alx.retranscribe(captured.id), false);
+    assert.equal(alx.retranscribe('없는아이디'), false);
+  } finally {
+    alx.close();
+    fs.rmSync(vaultDir, { recursive: true, force: true });
+  }
+});
+
 test('reorganize queues the pass again, and refuses an empty item', async () => {
   const vaultDir = fs.mkdtempSync(path.join(os.tmpdir(), 'alexandria-test-'));
   const alx = new Alexandria({ config: defaultConfig(vaultDir), llm: stubLlm(KICKOFF) });

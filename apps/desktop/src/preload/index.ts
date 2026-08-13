@@ -39,6 +39,7 @@ const api: AlexandriaApi = {
   related: (id, limit) => ipcRenderer.invoke(IPC.related, id, limit) as Promise<RelatedHit[]>,
   updateItem: (id, patch) => ipcRenderer.invoke(IPC.updateItem, id, patch) as Promise<Item | undefined>,
   reorganize: (id) => ipcRenderer.invoke(IPC.reorganize, id) as Promise<boolean>,
+  retranscribe: (id) => ipcRenderer.invoke(IPC.retranscribe, id) as Promise<boolean>,
 
   browserAttach: (bounds) => ipcRenderer.invoke(IPC.browserAttach, bounds) as Promise<void>,
   browserDetach: () => ipcRenderer.invoke(IPC.browserDetach) as Promise<void>,
