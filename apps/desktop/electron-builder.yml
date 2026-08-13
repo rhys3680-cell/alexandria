@@ -1,0 +1,106 @@
+appId: app.alexandria.desktop
+productName: Alexandria
+copyright: Copyright © 2026
+
+directories:
+  output: release
+  buildResources: build
+
+# Everything the app actually runs is already bundled into out/ by electron-vite.
+# The only node_modules that must survive are the ones the main bundle keeps
+# external because they load native binaries at runtime.
+#
+# The list is explicit rather than left to dependency detection: in a hoisted
+# pnpm workspace the modules sit in the *root* node_modules alongside every
+# devDependency, and letting electron-builder sweep that produced a 695 MB
+# app.asar full of electron, vite and typescript.
+files:
+  - out/**
+  - package.json
+  - '!node_modules/**'
+  - '!src/**'
+  - '!electron.vite.config.{ts,js}'
+  - '!electron-builder.yml'
+  - '!tsconfig.json'
+
+  # The full runtime closure of those three modules, walked from their
+  # package.json dependency graphs. Listing it by hand is the point: a missing
+  # entry fails loudly at runtime ("Cannot find module 'detect-libc'"), which is
+  # a far better failure than silently shipping the whole workspace.
+  #
+  # onnxruntime-web (128 MB, browser-only WASM) is deliberately absent — the
+  # packaged app was verified to embed without it.
+  - from: ../../node_modules
+    to: node_modules
+    filter:
+      - '@huggingface/transformers/**'
+      - '@huggingface/jinja/**'
+      - '@huggingface/tokenizers/**'
+      - onnxruntime-common/**
+      # Prebuilt for every platform it supports; this build needs one of them.
+      - onnxruntime-node/**
+      - '!onnxruntime-node/bin/napi-v6/darwin/**'
+      - '!onnxruntime-node/bin/napi-v6/linux/**'
+      - '!onnxruntime-node/bin/napi-v6/win32/arm64/**'
+      # transformers.js imports sharp eagerly for image pipelines this app never
+      # runs, so it and its dependencies have to be present anyway.
+      - sharp/**
+      - '@img/**'
+      - adm-zip/**
+      - global-agent/**
+      - boolean/**
+      - define-data-property/**
+      - define-properties/**
+      - detect-libc/**
+      - detect-node/**
+      - es-define-property/**
+      - es-errors/**
+      - es6-error/**
+      - escape-string-regexp/**
+      - globalthis/**
+      - gopd/**
+      - has-property-descriptors/**
+      - json-stringify-safe/**
+      - matcher/**
+      - object-keys/**
+      - roarr/**
+      - semver/**
+      - semver-compare/**
+      - serialize-error/**
+      - sprintf-js/**
+      - type-fest/**
+
+asar: true
+asarUnpack:
+  # Native binaries and the ONNX runtime cannot be loaded from inside an asar
+  # archive: dlopen needs a real path on disk.
+  - '**/*.node'
+  - '**/*.dll'
+  - node_modules/onnxruntime-node/**
+
+# Every native dependency here is an N-API prebuilt, so there is nothing to
+# rebuild — and rebuilding would demand a toolchain the project deliberately
+# does not require.
+npmRebuild: false
+
+win:
+  target:
+    - nsis
+  artifactName: ${productName}-${version}-setup.${ext}
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  shortcutName: Alexandria
+  deleteAppDataOnUninstall: false
+
+mac:
+  target:
+    - dmg
+  category: public.app-category.productivity
+
+linux:
+  target:
+    - AppImage
+  category: Utility

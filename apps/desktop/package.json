@@ -4,14 +4,18 @@
   "private": true,
   "type": "module",
   "main": "./out/main/index.js",
+  "description": "글과 음성을 알아서 정리하고, 찾아주고, 먼저 보여주는 개인용 데스크톱 앱",
+  "author": "Alexandria",
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "start": "electron-vite preview",
+    "package": "electron-vite build && electron-builder",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
     "@alexandria/core": "workspace:*",
+    "@huggingface/transformers": "^4.2.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"
   },
@@ -20,7 +24,8 @@
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",
     "@vitejs/plugin-react": "^6.0.5",
-    "electron": "^43.3.0",
+    "electron": "43.3.0",
+    "electron-builder": "^26.15.3",
     "electron-vite": "^5.0.0",
     "typescript": "^7.0.2",
     "vite": "^8.2.1"
