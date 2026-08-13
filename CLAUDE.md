@@ -63,3 +63,5 @@ Co-Authored-By: ...
 - **Tailwind 를 들이면 클래스 이름 공간이 전역으로 넓어진다.** 임의로 붙인 수식 클래스가 유틸리티 이름과 겹치면 조용히 그 유틸리티의 의미를 갖는다. `.right.fixed` 가 `position: fixed` 가 되어 패널이 그리드에서 튀어나갔다. 수식 클래스에는 접두사를 붙인다
 - **레이어 밖 CSS 는 레이어 안 CSS 를 항상 이긴다.** 손CSS 를 `@layer legacy` 로 넣어 `utilities` 아래에 두지 않으면 새 컴포넌트가 전부 옛 규칙에 덮인다
 - **그리드 행 수를 자식 개수에 의존시키지 않는다.** `grid-template-rows: auto 1fr auto` 인 셸에 배너를 하나 더 넣자 배너가 `1fr` 을 가져가 본문이 짓눌렸다. 셸은 flex column 으로 둔다
+- **종료 순서를 가정하지 않는다.** `before-quit` 은 창이 이미 파괴된 뒤에도 온다. 그때 `contentView` 를 만지면 `Object has been destroyed` 가 이벤트 핸들러에서 던져지고 Electron 이 오류 대화상자를 띄운다. 정리 코드는 `isDestroyed()` 를 확인하고 try/catch 로 감싼다
+- **e2e 는 그 경로를 실제로 지나가야 의미가 있다.** 브라우저 패널을 한 번도 열지 않는 테스트는 브라우저 정리 코드를 검증하지 못한다. 수정을 되돌려 테스트가 실패하는지 확인한다

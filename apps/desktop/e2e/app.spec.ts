@@ -33,7 +33,11 @@ test.beforeAll(async () => {
 });
 
 test.afterAll(async () => {
-  await app?.close();
+  try {
+    await app?.close();
+  } catch {
+    // The shutdown test may have closed it already.
+  }
   fs.rmSync(vaultDir, { recursive: true, force: true });
 });
 
@@ -139,6 +143,18 @@ test('the console accepts a typed turn and shows the tool modes', async () => {
   expect(Math.abs(panes.right!.height - panes.left!.height)).toBeLessThanOrEqual(1);
 });
 
+test('the browser pane opens and survives being torn down', async () => {
+  // Opening it is what matters: the in-app browser is destroyed on quit, and
+  // that path threw "Object has been destroyed" when the window went first.
+  // A run that never opens the browser never exercises it.
+  await page.locator('.header button[title="앱 안에서 웹 보기"]').click();
+  await expect(page.locator('.browser')).toBeVisible();
+  await expect(page.locator('.address')).toBeVisible();
+  await page.screenshot({ path: path.join(SHOTS, '05-browser.png') });
+
+  await page.locator('.header button[title="오늘 챙길 것들"]').click();
+});
+
 test('capturing a note runs it through the pipeline into the list', async () => {
   await page.locator('.header button[title="오늘 챙길 것들"]').click();
 
@@ -149,4 +165,19 @@ test('capturing a note runs it through the pipeline into the list', async () => 
   // existing in the list is what this asserts.
   await expect(page.locator('.list li').first()).toBeVisible({ timeout: 15_000 });
   await page.screenshot({ path: path.join(SHOTS, '04-captured.png') });
+});
+
+test('closing the window with the browser open shuts down cleanly', async () => {
+  // The exact path that crashed: the in-app browser is attached, the window is
+  // closed, and `before-quit` then tears the browser down after the window has
+  // already been destroyed. An uncaught throw there leaves Electron sitting on
+  // an error dialog, so this waits for the process to actually exit.
+  await page.locator('.header button[title="앱 안에서 웹 보기"]').click();
+  await expect(page.locator('.browser')).toBeVisible();
+
+  const exited = app.waitForEvent('close');
+  await app.evaluate(({ BrowserWindow }) => {
+    for (const window of BrowserWindow.getAllWindows()) window.close();
+  });
+  await exited;
 });

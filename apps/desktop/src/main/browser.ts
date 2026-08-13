@@ -76,7 +76,9 @@ export class InAppBrowser {
 
   state(): BrowserState {
     const contents = this.view?.webContents;
-    if (!contents) return { url: '', title: '', canGoBack: false, canGoForward: false, loading: false };
+    if (!contents || contents.isDestroyed()) {
+      return { url: '', title: '', canGoBack: false, canGoForward: false, loading: false };
+    }
     const url = contents.getURL();
     return {
       url: url === HOME ? '' : url,
@@ -188,11 +190,29 @@ export class InAppBrowser {
     return { url: contents.getURL(), title: contents.getTitle(), text };
   }
 
+  /**
+   * Tear-down has to survive being called after the window is already gone.
+   * On quit, `before-quit` can fire once the BrowserWindow has been destroyed,
+   * and touching `contentView` then throws "Object has been destroyed" out of
+   * an event handler — which Electron surfaces as a crash dialog.
+   */
   destroy(): void {
-    if (this.view && this.attached) this.window.contentView.removeChildView(this.view);
-    this.view?.webContents.close();
+    const view = this.view;
     this.view = undefined;
+    const wasAttached = this.attached;
     this.attached = false;
+    if (!view) return;
+
+    try {
+      if (wasAttached && !this.window.isDestroyed()) this.window.contentView.removeChildView(view);
+    } catch {
+      // The window went first; nothing left to detach from.
+    }
+    try {
+      if (!view.webContents.isDestroyed()) view.webContents.close();
+    } catch {
+      // Already closed.
+    }
   }
 }
 

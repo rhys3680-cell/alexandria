@@ -49,6 +49,8 @@ function vault(): Alexandria {
 
 function broadcast(channel: string, payload?: unknown): void {
   for (const window of BrowserWindow.getAllWindows()) {
+    // Events can still arrive while windows are being torn down.
+    if (window.isDestroyed() || window.webContents.isDestroyed()) continue;
     window.webContents.send(channel, payload);
   }
 }
