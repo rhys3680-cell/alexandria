@@ -193,6 +193,37 @@ export function SettingsDialog({
           </div>
         ) : undefined}
 
+        <Section
+          title="작업공간"
+          hint="대화에서 '작업공간' 모드를 쓰면 모델이 이 폴더 안에서만 파일을 만들고 고칩니다."
+        >
+          <div className="flex items-center gap-2">
+            <Input readOnly value={config.workspace.dir} className="font-mono text-xs" />
+            <Button
+              variant="ghost"
+              onClick={async () => {
+                const picked = await window.alexandria.pickFolder();
+                if (picked) await patch({ workspace: { dir: picked } });
+              }}
+            >
+              바꾸기
+            </Button>
+          </div>
+          <label className="flex items-start gap-2 text-xs text-fg-dim">
+            <input
+              type="checkbox"
+              className="mt-0.5 accent-[var(--accent)]"
+              checked={config.workspace.allowCommands}
+              onChange={(event) => void patch({ workspace: { allowCommands: event.target.checked } })}
+            />
+            <span>
+              <strong className="text-danger">명령 실행 허용</strong> — 모델이 이 폴더에서 명령을 실행할 수
+              있게 됩니다. 파일 쓰기보다 훨씬 큰 권한이고, 호출 비용도 약 2배($0.025 → $0.050)가 됩니다. 코드
+              작성·실행이 필요할 때만 켜세요.
+            </span>
+          </label>
+        </Section>
+
         <Section title="감시 폴더" hint="여기에 파일이 생기면 자동으로 수집합니다. `alx watch` 가 켜져 있을 때 동작합니다.">
           <div className="grid gap-1.5">
             {config.ingest.watchDirs.length === 0 ? (

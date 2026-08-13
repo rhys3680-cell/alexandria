@@ -135,6 +135,27 @@ The browser-standard `speechSynthesis` was the obvious choice and turned out to 
 
 **A known limit** — PowerShell startup means **2–3 seconds before speech begins**. The answer text streams in first, but it still breaks the rhythm of a conversation; replacing the per-utterance spawn with a resident process is left as follow-up work. Reading stops at 2,000 characters, and platforms other than Windows are not supported yet.
 
+## Workspace
+
+Pick **workspace** in the console and the model produces documents, slides and code as **actual files**.
+
+```bash
+alx ask --tools workspace "turn the meeting outcome into a one-page document"
+alx ask --tools workspace "make that into three presentation slides, one HTML file"
+```
+
+Slides are asked for as a **single self-contained HTML file** with inline styles, so they open in any browser with nothing else installed.
+
+### The permission boundary
+
+This is the feature that lets the app modify a user's files, so the boundary is drawn tightly.
+
+- **One directory** — only the workspace folder is handed over with `--add-dir`, and the process runs inside it. Nothing outside is exposed to the tools.
+- **Commands are separate and off by default** — a categorically larger grant than writing files, and it doubles the per-call cost ($0.025 → $0.050). It has to be turned on in settings.
+- **What it touched is shown** — the folder is snapshotted around the call, and created and modified files are listed under the turn. Granting write access and then hiding the result is how a workspace becomes something nobody trusts.
+
+> Found while building this: the prompt originally said "inside the workspace directory" without **naming the path**. The model reported creating the file and had in fact written nothing anywhere. It only worked once the path was in the prompt and the process ran in that folder.
+
 ## Web browser
 
 Browse inside the app and **capture the page you are looking at** into the vault.
@@ -169,6 +190,7 @@ Every granted tool ships its schema with each call. Measured on the same questio
 | `none` | 190 | $0.0013 | The conversation and given context only |
 | `web` | 1,892 | $0.012–0.033 | Search and read the web |
 | `vault` | 3,240 | ~$0.02 | Read vault files directly |
+| `workspace` | 4,159 | ~$0.025 | Write files in the workspace (8,337 / ~$0.05 with commands) |
 
 For comparison, leaving the CLI's full default tool set on costs 26,676 tokens. That is why the mode is the user's choice and defaults to `none`.
 
@@ -379,7 +401,7 @@ The renderer only sees the narrow API exposed over `contextBridge`. No database 
 ## Tests
 
 ```bash
-pnpm test                                   # 42 core tests
+pnpm test                                   # 45 core tests
 pnpm --filter @alexandria/desktop e2e       # Electron e2e (Playwright)
 ```
 
@@ -390,7 +412,7 @@ For Electron, Playwright drives the real app, clicks through it and writes scree
 pnpm test
 ```
 
-42 tests run against the built artifacts: frontmatter round-trips, filename normalisation, FTS query escaping, cross-lingual search, CJK trigram search, queue retries, task completion reaching the file, briefing due-date bucketing, rank fusion, vector storage, the relatedness floor, the dictionary reaching both whisper and the organize prompt, context injection and session resume for the console, and the whole capture-to-organized path with the model and embedder stubbed.
+45 tests run against the built artifacts: frontmatter round-trips, filename normalisation, FTS query escaping, cross-lingual search, CJK trigram search, queue retries, task completion reaching the file, briefing due-date bucketing, rank fusion, vector storage, the relatedness floor, the dictionary reaching both whisper and the organize prompt, context injection and session resume for the console, and the whole capture-to-organized path with the model and embedder stubbed.
 
 ## What's next
 

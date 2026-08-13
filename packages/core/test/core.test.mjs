@@ -33,6 +33,8 @@ import {
   retryFailedJobs,
   searchItems,
   significantNeighbours,
+  snapshotWorkspace,
+  diffWorkspace,
   slugify,
   stringifyFrontmatter,
   toMatchQuery,
@@ -771,6 +773,52 @@ test('reorganize queues the pass again, and refuses an empty item', async () => 
     alx.close();
     fs.rmSync(vaultDir, { recursive: true, force: true });
   }
+});
+
+test('the workspace diff reports what the model added and changed', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'alexandria-ws-'));
+  try {
+    fs.writeFileSync(path.join(dir, 'existing.md'), 'before');
+    fs.mkdirSync(path.join(dir, 'sub'));
+    fs.writeFileSync(path.join(dir, 'sub', 'nested.txt'), 'x');
+
+    const before = snapshotWorkspace(dir);
+    assert.equal(before.size, 2);
+    assert.ok(before.has('sub/nested.txt'), '경로는 슬래시로 정규화된다');
+
+    fs.writeFileSync(path.join(dir, 'new.html'), '<html></html>');
+    // mtime resolution is coarse enough that a rewrite needs a nudge.
+    const stamp = new Date(Date.now() + 2000);
+    fs.writeFileSync(path.join(dir, 'existing.md'), 'after');
+    fs.utimesSync(path.join(dir, 'existing.md'), stamp, stamp);
+
+    const changes = diffWorkspace(before, snapshotWorkspace(dir));
+    assert.deepEqual(changes.added, ['new.html']);
+    assert.deepEqual(changes.modified, ['existing.md']);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('an untouched workspace reports nothing', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'alexandria-ws-'));
+  try {
+    fs.writeFileSync(path.join(dir, 'a.md'), 'x');
+    const before = snapshotWorkspace(dir);
+    const changes = diffWorkspace(before, snapshotWorkspace(dir));
+    assert.deepEqual(changes, { added: [], modified: [] });
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('the workspace prompt names the directory the model may write to', () => {
+  const withDir = buildAskSystemPrompt('workspace', 'C:/vault/workspace');
+  assert.match(withDir, /C:\/vault\/workspace/, '경로를 알려주지 않으면 모델이 아무데도 못 쓴다');
+  assert.match(withDir, /self-contained HTML/, '슬라이드 규칙');
+
+  // Other levels must not be handed a writable path.
+  assert.ok(!buildAskSystemPrompt('web', 'C:/vault/workspace').includes('C:/vault/workspace'));
 });
 
 // ------------------------------------------------------------ related records

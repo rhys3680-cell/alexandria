@@ -389,7 +389,7 @@ program
 program
   .command('ask <question...>')
   .description('앱에 붙은 모델과 대화합니다')
-  .option('--tools <level>', '도구 수준: none | web | vault', 'none')
+  .option('--tools <level>', '도구 수준: none | web | vault | workspace', 'none')
   .option('--item <id...>', '이 항목들을 문맥으로 넣습니다')
   .option('--search <query>', '검색 상위 결과를 문맥으로 넣습니다')
   .option('-n, --context <count>', '--search 로 넣을 개수', (value) => Number.parseInt(value, 10), 5)
@@ -408,8 +408,10 @@ program
       },
     ) => {
       const tools = options.tools as ToolAccess;
-      if (!['none', 'web', 'vault'].includes(tools)) {
-        console.error(color.red(`알 수 없는 도구 수준: ${options.tools}. none | web | vault 중 하나여야 합니다.`));
+      if (!['none', 'web', 'vault', 'workspace'].includes(tools)) {
+        console.error(
+          color.red(`알 수 없는 도구 수준: ${options.tools}. none | web | vault | workspace 중 하나여야 합니다.`),
+        );
         process.exitCode = 1;
         return;
       }
@@ -431,7 +433,19 @@ program
         if (context.length) {
           console.log(color.dim(`문맥 ${context.length}건: ${context.map((i) => i.id.slice(-6)).join(', ')}\n`));
         }
-        if (tools !== 'none') console.log(color.dim(`도구: ${tools} (호출 비용이 올라갑니다)\n`));
+        if (tools === 'workspace') {
+          // Writing is the one grant worth naming out loud, with the directory.
+          console.log(color.yellow(`작업공간: ${alx.config.workspace.dir}`));
+          console.log(
+            color.dim(
+              `  이 폴더 안에서만 읽고 씁니다.${
+                alx.config.workspace.allowCommands ? ' 명령 실행도 허용되어 있습니다.' : ''
+              }\n`,
+            ),
+          );
+        } else if (tools !== 'none') {
+          console.log(color.dim(`도구: ${tools} (호출 비용이 올라갑니다)\n`));
+        }
 
         const result = await alx.ask({
           prompt: question,
@@ -440,6 +454,13 @@ program
           // Streamed straight to stdout so a long answer is readable as it lands.
           onText: (chunk) => process.stdout.write(chunk),
         });
+
+        const changes = result.changes;
+        if (changes && (changes.added.length || changes.modified.length)) {
+          console.log(`\n\n${color.bold('작업공간 변경')}`);
+          for (const file of changes.added) console.log(`  ${color.green('새로 만듦')}  ${file}`);
+          for (const file of changes.modified) console.log(`  ${color.yellow('고침')}      ${file}`);
+        }
 
         console.log(color.dim(`\n\n비용 환산 $${result.costUsd.toFixed(4)} · ${(result.durationMs / 1000).toFixed(1)}s`));
 

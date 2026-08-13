@@ -542,12 +542,19 @@ interface ChatTurn {
   costUsd?: number;
   saved?: boolean;
   failed?: boolean;
+  /** Files the model touched, when it had workspace access. */
+  changes?: { added: string[]; modified: string[] };
 }
 
 const TOOL_MODES: { value: ToolAccess; label: string; hint: string }[] = [
   { value: 'none', label: '빠름', hint: '도구 없음 · 가장 저렴 (~$0.001/회)' },
   { value: 'web', label: '웹', hint: '웹 검색·읽기 · ~$0.01–0.03/회' },
   { value: 'vault', label: '보관소', hint: '보관소 파일 직접 읽기 · ~$0.02/회' },
+  {
+    value: 'workspace',
+    label: '작업공간',
+    hint: '작업공간 폴더에 문서·슬라이드·코드를 씁니다 · ~$0.025/회',
+  },
 ];
 
 function Console({
@@ -620,7 +627,12 @@ function Console({
         const last = next[next.length - 1];
         if (last?.role === 'assistant') {
           // The streamed text can lag the final result; trust the result.
-          next[next.length - 1] = { ...last, text: result.text || last.text, costUsd: result.costUsd };
+          next[next.length - 1] = {
+            ...last,
+            text: result.text || last.text,
+            costUsd: result.costUsd,
+            changes: result.changes,
+          };
         }
         return next;
       });
@@ -708,6 +720,20 @@ function Console({
             <div className="turn-text">
               {turn.text || (busy && index === turns.length - 1 ? <span className="thinking">생각 중…</span> : '')}
             </div>
+            {turn.changes && (turn.changes.added.length || turn.changes.modified.length) ? (
+              <div className="turn-files">
+                {turn.changes.added.map((file) => (
+                  <div key={`a-${file}`}>
+                    <span className="tag-new">새로 만듦</span> {file}
+                  </div>
+                ))}
+                {turn.changes.modified.map((file) => (
+                  <div key={`m-${file}`}>
+                    <span className="tag-mod">고침</span> {file}
+                  </div>
+                ))}
+              </div>
+            ) : undefined}
             {turn.role === 'assistant' && turn.text && !turn.failed ? (
               <div className="turn-meta">
                 {turn.costUsd ? <span>${turn.costUsd.toFixed(4)}</span> : undefined}
@@ -770,6 +796,11 @@ function Console({
             </button>
           ) : undefined}
         </div>
+        {tools === 'workspace' ? (
+          <p className="workspace-warning">
+            모델이 작업공간 폴더 안에서 파일을 만들고 고칩니다. 만든 파일은 아래에 표시됩니다.
+          </p>
+        ) : undefined}
         <textarea
           value={draft}
           placeholder="무엇이든 물어보세요. Ctrl+Enter 로 보냅니다."

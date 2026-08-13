@@ -50,12 +50,24 @@ export interface SearchConfig {
   maxChars: number;
 }
 
+export interface WorkspaceConfig {
+  /** The one directory the model may write into. Nothing outside it is exposed. */
+  dir: string;
+  /**
+   * Whether the model may also run commands. Off by default: it is a
+   * categorically larger grant than writing files, and it doubles the per-call
+   * cost — 8,337 input tokens against 4,159, measured.
+   */
+  allowCommands: boolean;
+}
+
 export interface AlexandriaConfig {
   vaultDir: string;
   llm: LlmConfig;
   stt: SttConfig;
   ingest: IngestConfig;
   search: SearchConfig;
+  workspace: WorkspaceConfig;
 }
 
 export const CONFIG_DIRNAME = '.alexandria';
@@ -81,6 +93,10 @@ export function defaultConfig(vaultDir = defaultVaultDir()): AlexandriaConfig {
       watchDirs: [],
       textExtensions: ['.md', '.txt', '.markdown'],
       audioExtensions: ['.wav', '.mp3', '.m4a', '.ogg', '.flac', '.webm', '.mp4'],
+    },
+    workspace: {
+      dir: path.join(vaultDir, 'workspace'),
+      allowCommands: false,
     },
     search: {
       semantic: false,
@@ -121,6 +137,7 @@ export function loadConfig(vaultDir = defaultVaultDir()): AlexandriaConfig {
     stt: { ...base.stt, ...partial.stt },
     ingest: { ...base.ingest, ...partial.ingest },
     search: { ...base.search, ...partial.search },
+    workspace: { ...base.workspace, ...partial.workspace },
   };
 }
 

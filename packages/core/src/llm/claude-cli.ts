@@ -18,6 +18,9 @@ const TOOL_SETS: Record<ToolAccess, string[]> = {
   none: [],
   web: ['WebSearch', 'WebFetch'],
   vault: ['Read', 'Glob', 'Grep'],
+  // Writing is scoped to the workspace directory by --add-dir; Bash is added
+  // only when the user has explicitly allowed commands.
+  workspace: ['Read', 'Write', 'Edit', 'Glob', 'Grep'],
 };
 
 interface ClaudeEnvelope {
@@ -45,8 +48,15 @@ export class ClaudeCliAdapter implements LlmAdapter {
 
   constructor(
     private readonly config: LlmConfig,
-    /** Granted as a readable directory when tool access is `vault`. */
-    private readonly vaultDir?: string,
+    /** Directories the model may reach, each only at its own access level. */
+    private readonly grants: {
+      /** Readable when tool access is `vault`. */
+      vaultDir?: string;
+      /** Readable and writable when tool access is `workspace`. */
+      workspaceDir?: string;
+      /** Adds Bash to the workspace level. */
+      allowCommands?: boolean;
+    } = {},
   ) {}
 
   async check(): Promise<string | null> {
@@ -66,11 +76,12 @@ export class ClaudeCliAdapter implements LlmAdapter {
   }
 
   async complete(request: LlmRequest): Promise<LlmResponse> {
-    const { resolved, args, model } = this.buildArgs(request, false);
+    const { resolved, args, model, cwd } = this.buildArgs(request, false);
 
     const result = await run(resolved.file, args, {
       input: request.prompt,
       timeoutMs: this.config.timeoutMs,
+      cwd,
     });
 
     if (result.timedOut) {
@@ -90,12 +101,13 @@ export class ClaudeCliAdapter implements LlmAdapter {
   }
 
   async stream(request: LlmRequest, onText: (chunk: string) => void): Promise<LlmResponse> {
-    const { resolved, args, model } = this.buildArgs(request, true);
+    const { resolved, args, model, cwd } = this.buildArgs(request, true);
 
     let envelope: ClaudeEnvelope | undefined;
     const result = await runStreaming(resolved.file, args, {
       input: request.prompt,
       timeoutMs: this.config.timeoutMs,
+      cwd,
       onLine: (line) => {
         let event: { type?: string; event?: { type?: string; delta?: { text?: string } } } & ClaudeEnvelope;
         try {
@@ -143,7 +155,7 @@ export class ClaudeCliAdapter implements LlmAdapter {
   private buildArgs(
     request: LlmRequest,
     streaming: boolean,
-  ): { resolved: ResolvedCommand; args: string[]; model: string } {
+  ): { resolved: ResolvedCommand; args: string[]; model: string; cwd?: string } {
     const resolved = resolveCommand(this.config.command);
     if (!resolved) {
       throw new LlmError(`'${this.config.command}' 실행 파일을 찾을 수 없습니다.`);
@@ -151,7 +163,8 @@ export class ClaudeCliAdapter implements LlmAdapter {
 
     const model = request.model ?? this.config.model;
     const access: ToolAccess = request.tools ?? 'none';
-    const tools = TOOL_SETS[access];
+    const tools = [...TOOL_SETS[access]];
+    if (access === 'workspace' && this.grants.allowCommands) tools.push('Bash');
 
     const args = [...resolved.prefixArgs, '--print'];
 
@@ -187,7 +200,12 @@ export class ClaudeCliAdapter implements LlmAdapter {
     // permission the CLI denies it silently in non-interactive mode, and the
     // model answers that it "has no web access".
     if (tools.length) args.push('--allowedTools', tools.join(' '));
-    if (access === 'vault' && this.vaultDir) args.push('--add-dir', this.vaultDir);
+    // The only directory the model is ever handed. Without this the tools have
+    // nothing they are permitted to touch.
+    if (access === 'vault' && this.grants.vaultDir) args.push('--add-dir', this.grants.vaultDir);
+    if (access === 'workspace' && this.grants.workspaceDir) {
+      args.push('--add-dir', this.grants.workspaceDir);
+    }
     if (request.resume) args.push('--resume', request.resume);
     // Sessions are only kept when something intends to resume them.
     if (!request.persist && !request.resume) args.push('--no-session-persistence');
@@ -195,6 +213,9 @@ export class ClaudeCliAdapter implements LlmAdapter {
       args.push('--max-budget-usd', String(this.config.maxBudgetUsd));
     }
 
-    return { resolved, args, model };
+    // Run inside the workspace so a relative path the model writes lands there
+    // rather than wherever the app happened to be started from.
+    const cwd = access === 'workspace' ? this.grants.workspaceDir : undefined;
+    return { resolved, args, model, cwd };
   }
 }

@@ -33,6 +33,7 @@ import type { TranscriptionResult } from './types.js';
 import * as store from './store.js';
 import type { Item, ItemSource, ItemTask } from './types.js';
 import { Vault } from './vault.js';
+import { diffWorkspace, ensureWorkspace, snapshotWorkspace } from './workspace.js';
 
 export interface CaptureTextInput {
   text: string;
@@ -112,7 +113,13 @@ export class Alexandria {
     this.vault = new Vault(this.config.vaultDir);
     this.vault.ensure();
     this.db = deps.db ?? openDatabase(this.config.vaultDir);
-    this.llm = deps.llm ?? new ClaudeCliAdapter(this.config.llm, this.config.vaultDir);
+    this.llm =
+      deps.llm ??
+      new ClaudeCliAdapter(this.config.llm, {
+        vaultDir: this.config.vaultDir,
+        workspaceDir: this.config.workspace.dir,
+        allowCommands: this.config.workspace.allowCommands,
+      });
     this.transcriber = deps.transcriber ?? new WhisperCppTranscriber(this.config.stt);
     this.embedder =
       deps.embedder ?? new TransformersEmbedder(this.config.search, vendorDir(this.config.vaultDir));
@@ -490,23 +497,31 @@ export class Alexandria {
     if (!question) throw new Error('빈 질문은 보낼 수 없습니다.');
 
     const request = {
-      system: buildAskSystemPrompt(input.tools ?? 'none'),
+      system: buildAskSystemPrompt(input.tools ?? 'none', this.config.workspace.dir),
       prompt: buildAskPrompt({ ...input, prompt: question }),
       tools: input.tools ?? 'none',
       resume: input.resume,
       persist: true,
     };
 
+    // Snapshot first, so the app can report exactly what the model touched.
+    const workspace = request.tools === 'workspace' ? ensureWorkspace(this.config.workspace.dir) : undefined;
+    const before = workspace ? snapshotWorkspace(workspace) : undefined;
+
     const response = input.onText
       ? await this.llm.stream(request, input.onText)
       : await this.llm.complete(request);
 
-    this.logger.info('대화', { tools: request.tools, costUsd: response.costUsd });
+    const changes =
+      workspace && before ? diffWorkspace(before, snapshotWorkspace(workspace)) : undefined;
+
+    this.logger.info('대화', { tools: request.tools, costUsd: response.costUsd, changes });
     return {
       text: response.text,
       costUsd: response.costUsd,
       durationMs: response.durationMs,
       sessionId: response.sessionId,
+      changes,
     };
   }
 

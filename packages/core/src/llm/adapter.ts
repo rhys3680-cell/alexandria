@@ -4,13 +4,14 @@
  * Each step up costs real tokens, because every granted tool ships its schema
  * with the request. Measured on the same trivial prompt:
  *
- *   none    190 input tokens   $0.0013
- *   web   1,892 input tokens   $0.0120
- *   vault 3,240 input tokens   $0.0201
+ *   none      190 input tokens   $0.0013
+ *   web     1,892 input tokens   $0.0120
+ *   vault   3,240 input tokens   $0.0201
+ *   workspace 4,159 input tokens $0.0250   (8,337 / $0.0501 with commands)
  *
  * For comparison, letting the CLI keep its full default tool set costs 26,676.
  */
-export type ToolAccess = 'none' | 'web' | 'vault';
+export type ToolAccess = 'none' | 'web' | 'vault' | 'workspace';
 
 export interface LlmRequest {
   system: string;

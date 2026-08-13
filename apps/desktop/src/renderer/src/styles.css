@@ -808,3 +808,45 @@ button:disabled {
   color: var(--text-dim);
   font-size: 12px;
 }
+
+/* Files the model wrote, shown under the turn that wrote them. */
+.turn-files {
+  margin-top: 8px;
+  display: grid;
+  gap: 3px;
+  font-size: 12px;
+  font-family: ui-monospace, monospace;
+  color: var(--text-dim);
+}
+
+.tag-new,
+.tag-mod {
+  display: inline-block;
+  min-width: 58px;
+  padding: 0 6px;
+  margin-right: 6px;
+  border-radius: 4px;
+  font-family: var(--font);
+  font-size: 11px;
+  text-align: center;
+}
+
+.tag-new {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.tag-mod {
+  background: var(--panel-alt);
+  color: var(--warn);
+}
+
+.workspace-warning {
+  margin: 0 0 8px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--panel-alt);
+  border: 1px solid var(--line);
+  font-size: 12px;
+  color: var(--text-dim);
+}

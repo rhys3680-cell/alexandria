@@ -22,6 +22,8 @@ export interface AskResult {
   durationMs: number;
   /** Pass back as `resume` to keep the conversation going. */
   sessionId?: string;
+  /** Files the model touched, when it had workspace access. */
+  changes?: { added: string[]; modified: string[] };
 }
 
 const BASE_RULES = `You are the assistant inside Alexandria, someone's personal archive of notes and recordings.
@@ -35,10 +37,18 @@ const TOOL_RULES: Record<ToolAccess, string> = {
   none: '\n- You have no tools. Answer from the conversation and any provided items alone.',
   web: '\n- You can search and fetch the web. Cite each claim you take from a page with its URL. Prefer primary sources, and say when you could not verify something.',
   vault: '\n- You can read files inside the vault directory. The markdown files under items/ are the archive; frontmatter carries the derived metadata.',
+  workspace:
+    '\n- You can read and write files inside the workspace directory, and nowhere else. Put everything you produce there.' +
+    '\n- Prefer markdown for documents. For slides, write one self-contained HTML file with its styles inline, so it opens in any browser with nothing else installed. For code, write real files rather than pasting them into the reply.' +
+    '\n- Finish by naming the files you created or changed, one line each on what it is. Do not paste whole files back into the reply.',
 };
 
-export function buildAskSystemPrompt(tools: ToolAccess = 'none'): string {
-  return BASE_RULES + TOOL_RULES[tools];
+export function buildAskSystemPrompt(tools: ToolAccess = 'none', workspaceDir?: string): string {
+  // Saying "the workspace directory" without naming it is how the model ends up
+  // writing nowhere and reporting success: the path has to be in the prompt.
+  const location = tools === 'workspace' && workspaceDir ? `
+- The workspace directory is: ${workspaceDir}` : '';
+  return BASE_RULES + TOOL_RULES[tools] + location;
 }
 
 export function buildAskPrompt(input: AskInput): string {

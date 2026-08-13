@@ -20,3 +20,4 @@ export * from './stt/whisper.js';
 export * from './tts.js';
 export * from './types.js';
 export * from './vault.js';
+export * from './workspace.js';
