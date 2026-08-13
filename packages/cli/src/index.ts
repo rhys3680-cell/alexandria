@@ -28,6 +28,7 @@ import {
   type PipelineEvent,
   type SearchHit,
   type SearchMode,
+  type ToolAccess,
   type WhisperModel,
 } from '@alexandria/core';
 import {
@@ -380,6 +381,65 @@ program
       console.log(`${options.undo ? color.yellow('되돌림') : color.green('완료')}  ${task?.text ?? ''}`);
     });
   });
+
+// -------------------------------------------------------------------- ask
+
+program
+  .command('ask <question...>')
+  .description('앱에 붙은 모델과 대화합니다')
+  .option('--tools <level>', '도구 수준: none | web | vault', 'none')
+  .option('--item <id...>', '이 항목들을 문맥으로 넣습니다')
+  .option('--search <query>', '검색 상위 결과를 문맥으로 넣습니다')
+  .option('-n, --context <count>', '--search 로 넣을 개수', (value) => Number.parseInt(value, 10), 5)
+  .option('--save', '질문과 답변을 보관소에 저장합니다')
+  .action(
+    async (
+      questionParts: string[],
+      options: { tools: string; item?: string[]; search?: string; context: number; save?: boolean },
+    ) => {
+      const tools = options.tools as ToolAccess;
+      if (!['none', 'web', 'vault'].includes(tools)) {
+        console.error(color.red(`알 수 없는 도구 수준: ${options.tools}. none | web | vault 중 하나여야 합니다.`));
+        process.exitCode = 1;
+        return;
+      }
+
+      await withVault(async (alx) => {
+        const question = questionParts.join(' ');
+        const context: Item[] = [];
+
+        for (const id of options.item ?? []) {
+          const item = resolveItem(alx, id);
+          if (item) context.push(item);
+          else console.error(color.yellow(`항목을 찾지 못해 건너뜁니다: ${id}`));
+        }
+        if (options.search) {
+          const hits = await alx.search(options.search, options.context);
+          context.push(...hits.map((hit) => hit.item));
+        }
+
+        if (context.length) {
+          console.log(color.dim(`문맥 ${context.length}건: ${context.map((i) => i.id.slice(-6)).join(', ')}\n`));
+        }
+        if (tools !== 'none') console.log(color.dim(`도구: ${tools} (호출 비용이 올라갑니다)\n`));
+
+        const result = await alx.ask({
+          prompt: question,
+          tools,
+          context,
+          // Streamed straight to stdout so a long answer is readable as it lands.
+          onText: (chunk) => process.stdout.write(chunk),
+        });
+
+        console.log(color.dim(`\n\n비용 환산 $${result.costUsd.toFixed(4)} · ${(result.durationMs / 1000).toFixed(1)}s`));
+
+        if (options.save) {
+          const item = alx.saveAnswer(question, result.text);
+          console.log(`${color.green('저장됨')}  ${item.id.slice(-6)}  ${color.dim('정리는 대기열에서 진행됩니다.')}`);
+        }
+      });
+    },
+  );
 
 // ------------------------------------------------------------------- dict
 
