@@ -17,5 +17,6 @@ export * from './search/hybrid.js';
 export * from './store.js';
 export * from './stt/setup.js';
 export * from './stt/whisper.js';
+export * from './tts.js';
 export * from './types.js';
 export * from './vault.js';

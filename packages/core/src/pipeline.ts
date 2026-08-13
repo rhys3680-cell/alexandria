@@ -29,6 +29,7 @@ import { createLogger, silentLogger, type Logger } from './logger.js';
 import { embeddingText, TransformersEmbedder, type Embedder } from './search/embedder.js';
 import { fuseRanks, rankBySimilarity, significantNeighbours } from './search/hybrid.js';
 import { formatTranscript, WhisperCppTranscriber, type Transcriber } from './stt/whisper.js';
+import type { TranscriptionResult } from './types.js';
 import * as store from './store.js';
 import type { Item, ItemSource, ItemTask } from './types.js';
 import { Vault } from './vault.js';
@@ -505,6 +506,16 @@ export class Alexandria {
       source: 'assistant',
       sourceRef,
     });
+  }
+
+  /**
+   * Transcribes a one-off recording without touching the vault — a spoken
+   * question is not a capture. Still applies the dictionary, because a
+   * misheard name matters just as much in a question.
+   */
+  async transcribeOnce(audioPath: string): Promise<TranscriptionResult> {
+    const prompt = buildWhisperPrompt(this.dictionary());
+    return this.transcriber.transcribe(audioPath, { prompt: prompt || undefined });
   }
 
   /**
