@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Briefing, BriefingTask, Item, RelatedHit, SearchHit, ToolAccess } from '@alexandria/core';
 import type { BrowserState, DoctorCheck, VaultStats } from '../../shared/api.js';
 import { EditItemDialog } from './components/EditItemDialog.js';
+import { SettingsDialog } from './components/SettingsDialog.js';
 import { Button } from './components/ui/button.js';
 
 const STATUS_LABEL: Record<string, string> = {
@@ -101,6 +102,7 @@ export function App(): React.JSX.Element {
 
   const failing = checks.filter((check) => !check.ok);
   const [setupDismissed, setSetupDismissed] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const actionable = failing.filter((check) => check.fix);
 
   return (
@@ -142,6 +144,9 @@ export function App(): React.JSX.Element {
           onChange={(event) => setQuery(event.target.value)}
         />
         <Recorder onCaptured={refresh} onNotice={showNotice} />
+        <Button variant="ghost" size="icon" title="설정" onClick={() => setSettingsOpen(true)}>
+          ⚙
+        </Button>
       </header>
 
       {actionable.length && !setupDismissed ? (
@@ -156,11 +161,16 @@ export function App(): React.JSX.Element {
                 </li>
               ))}
             </ul>
-            <span className="dim">저장소 폴더에서 위 명령을 실행한 뒤 앱을 다시 시작하세요.</span>
+            <span className="dim">설정 화면에서 바로 설치하거나, 저장소 폴더에서 위 명령을 실행하세요.</span>
           </div>
-          <button className="link" onClick={() => setSetupDismissed(true)}>
-            닫기
-          </button>
+          <div className="flex items-center gap-2">
+            <Button size="sm" onClick={() => setSettingsOpen(true)}>
+              설정 열기
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setSetupDismissed(true)}>
+              닫기
+            </Button>
+          </div>
         </div>
       ) : undefined}
 
@@ -212,6 +222,13 @@ export function App(): React.JSX.Element {
           )}
         </section>
       </main>
+
+      <SettingsDialog
+        open={settingsOpen}
+        onOpenChange={setSettingsOpen}
+        checks={checks}
+        onNotice={showNotice}
+      />
 
       <footer className="footer">
         <span>{stats ? `${sumStatuses(stats)}건` : '…'}</span>

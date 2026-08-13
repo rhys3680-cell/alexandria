@@ -352,7 +352,19 @@ Components are moving to **Tailwind v4 + shadcn/ui**, applied to new screens fir
 - **Preflight is off.** Tailwind's global reset changes list markers, button defaults and typography all at once, which would restyle every screen still drawn by hand-written CSS. When the last of that CSS is gone, switching to `@import 'tailwindcss'` brings the reset back.
 - **One palette.** `@theme inline` points at the CSS variables that already exist (`--bg`, `--accent`, …), so Tailwind classes and hand-written rules cannot drift, and dark mode keeps working through the existing media query.
 
-Migrated so far: the edit-item dialog and the detail view's actions.
+Migrated so far: the edit-item dialog, the settings screen, and the detail view's actions.
+
+## Settings
+
+What used to be CLI-only now lives in the app, behind the ⚙ in the header.
+
+- **Dictionary** — recurring names and terms. The single biggest lever on transcription accuracy, and until now reachable only through `alx dict`.
+- **Speech recognition / semantic search** — model choice, and **the download itself**, with progress. The classic way a first run goes wrong is pressing a feature that quietly needed `alx setup whisper`.
+- **Organizing** — model and effort, which is where per-call cost is decided.
+- **Watch folders** — added through the native folder picker.
+- **Checks** — the doctor output, in place.
+
+Settings are written to the vault's `config.json`; changing a model takes effect after a restart.
 
 ## Layout
 

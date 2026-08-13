@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'electron';
 import type {
+  AlexandriaConfig,
   AskResult,
   Briefing,
   Item,
@@ -14,6 +15,7 @@ import {
   type AskChunk,
   type BrowserState,
   type DoctorCheck,
+  type SetupProgress,
   type VaultStats,
 } from '../shared/api.js';
 
@@ -58,6 +60,16 @@ const api: AlexandriaApi = {
   briefing: (soonDays) => ipcRenderer.invoke(IPC.briefing, soonDays) as Promise<Briefing>,
   setTaskDone: (itemId, index, done) =>
     ipcRenderer.invoke(IPC.setTaskDone, itemId, index, done) as Promise<Item | undefined>,
+
+  getConfig: () => ipcRenderer.invoke(IPC.getConfig) as Promise<AlexandriaConfig>,
+  setConfig: (patch) => ipcRenderer.invoke(IPC.setConfig, patch) as Promise<AlexandriaConfig>,
+  getDictionary: () => ipcRenderer.invoke(IPC.getDictionary) as Promise<string[]>,
+  setDictionary: (terms) => ipcRenderer.invoke(IPC.setDictionary, terms) as Promise<string[]>,
+  runSetupWhisper: (model) => ipcRenderer.invoke(IPC.runSetupWhisper, model) as Promise<void>,
+  runSetupEmbeddings: (model) => ipcRenderer.invoke(IPC.runSetupEmbeddings, model) as Promise<void>,
+  onSetupProgress: (listener) =>
+    subscribe(IPC.setupProgress, (_event, payload) => listener(payload as SetupProgress)),
+  pickFolder: () => ipcRenderer.invoke(IPC.pickFolder) as Promise<string | undefined>,
 
   stats: () => ipcRenderer.invoke(IPC.stats) as Promise<VaultStats>,
   doctor: () => ipcRenderer.invoke(IPC.doctor) as Promise<DoctorCheck[]>,

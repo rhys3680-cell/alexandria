@@ -2,20 +2,30 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { randomBytes } from 'node:crypto';
-import { app, BrowserWindow, ipcMain, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
 import {
   Alexandria,
   createLogger,
   describeError,
+  ensureModel,
+  ensureWhisperBinary,
   guessLanguage,
+  loadConfig,
+  loadDictionary,
+  saveConfig,
+  saveDictionary,
+  TransformersEmbedder,
+  vendorDir,
   WindowsSapiSpeaker,
+  type AlexandriaConfig,
+  type WhisperModel,
   type Item,
   type ItemPatch,
   type ListOptions,
   type PipelineEvent,
 } from '@alexandria/core';
 import { InAppBrowser } from './browser.js';
-import { IPC, type AskRequest, type BrowserBounds } from '../shared/api.js';
+import { IPC, type AskRequest, type BrowserBounds, type DeepPartial, type SetupProgress } from '../shared/api.js';
 
 const isDev = !app.isPackaged;
 
@@ -244,6 +254,87 @@ function registerIpc(): void {
     const updated = vault().setTaskDone(itemId, index, done);
     if (updated) broadcast(IPC.changed);
     return updated;
+  });
+
+  ipcMain.handle(IPC.getConfig, async () => vault().config);
+
+  ipcMain.handle(IPC.setConfig, async (_event, patch: DeepPartial<AlexandriaConfig>) => {
+    const current = loadConfig(vault().config.vaultDir);
+    const merged: AlexandriaConfig = {
+      ...current,
+      llm: { ...current.llm, ...patch.llm },
+      stt: { ...current.stt, ...patch.stt },
+      ingest: { ...current.ingest, ...patch.ingest },
+      search: { ...current.search, ...patch.search },
+    };
+    saveConfig(merged);
+    // The running instance holds its own copy, so changes land on restart.
+    return merged;
+  });
+
+  ipcMain.handle(IPC.getDictionary, async () => loadDictionary(vault().config.vaultDir));
+
+  ipcMain.handle(IPC.setDictionary, async (_event, terms: string[]) => {
+    saveDictionary(vault().config.vaultDir, terms);
+    return loadDictionary(vault().config.vaultDir);
+  });
+
+  ipcMain.handle(IPC.pickFolder, async () => {
+    const result = await dialog.showOpenDialog({ properties: ['openDirectory'] });
+    return result.canceled ? undefined : result.filePaths[0];
+  });
+
+  ipcMain.handle(IPC.runSetupWhisper, async (event, model: string) => {
+    const report = (progress: Omit<SetupProgress, 'stage'>) =>
+      event.sender.send(IPC.setupProgress, { stage: 'whisper', ...progress });
+    const vendor = vendorDir(vault().config.vaultDir);
+
+    try {
+      report({ message: '실행 파일 확인 중…' });
+      const binary = await ensureWhisperBinary(vendor, (received, total) =>
+        report({ message: '실행 파일 내려받는 중', received, total }),
+      );
+      if (binary.instructions) {
+        report({ message: binary.instructions, error: binary.instructions, done: true });
+        return;
+      }
+
+      report({ message: `모델 '${model}' 내려받는 중` });
+      const modelPath = await ensureModel(vendor, model as WhisperModel, (received, total) =>
+        report({ message: `모델 '${model}' 내려받는 중`, received, total }),
+      );
+
+      const current = loadConfig(vault().config.vaultDir);
+      saveConfig({ ...current, stt: { ...current.stt, binPath: binary.path, modelPath } });
+      report({ message: '설치 완료. 앱을 다시 시작하면 적용됩니다.', done: true });
+    } catch (error) {
+      report({ message: describeError(error), error: describeError(error), done: true });
+    }
+  });
+
+  ipcMain.handle(IPC.runSetupEmbeddings, async (event, model: string) => {
+    const report = (progress: Omit<SetupProgress, 'stage'>) =>
+      event.sender.send(IPC.setupProgress, { stage: 'embeddings', ...progress });
+
+    try {
+      const current = loadConfig(vault().config.vaultDir);
+      const search = { ...current.search, semantic: true, model };
+      report({ message: `모델 '${model}' 준비 중` });
+
+      const embedder = new TransformersEmbedder(search, vendorDir(current.vaultDir), (progress) =>
+        report({ message: `모델 내려받는 중 ${progress.file}`, received: progress.loaded, total: progress.total }),
+      );
+      const problem = await embedder.check();
+      if (problem) {
+        report({ message: problem, error: problem, done: true });
+        return;
+      }
+
+      saveConfig({ ...current, search });
+      report({ message: '설치 완료. 앱을 다시 시작하면 기존 항목이 임베딩됩니다.', done: true });
+    } catch (error) {
+      report({ message: describeError(error), error: describeError(error), done: true });
+    }
   });
 
   ipcMain.handle(IPC.stats, async () => vault().stats());

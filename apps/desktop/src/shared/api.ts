@@ -8,7 +8,11 @@ import type {
   SearchHit,
   ToolAccess,
   ItemPatch,
+  AlexandriaConfig,
 } from '@alexandria/core';
+
+/** Every field optional, all the way down — settings save one section at a time. */
+export type DeepPartial<T> = { [K in keyof T]?: T[K] extends object ? DeepPartial<T[K]> : T[K] };
 
 export interface AskRequest {
   /** Correlates streamed chunks with this turn. */
@@ -39,6 +43,15 @@ export interface BrowserState {
   canGoBack: boolean;
   canGoForward: boolean;
   loading: boolean;
+}
+
+export interface SetupProgress {
+  stage: 'whisper' | 'embeddings';
+  message: string;
+  received?: number;
+  total?: number;
+  done?: boolean;
+  error?: string;
 }
 
 export interface VaultStats {
@@ -107,6 +120,22 @@ export interface AlexandriaApi {
   briefing(soonDays?: number): Promise<Briefing>;
   setTaskDone(itemId: string, index: number, done: boolean): Promise<Item | undefined>;
 
+  /** The whole config, and a partial merge back. */
+  getConfig(): Promise<AlexandriaConfig>;
+  setConfig(patch: DeepPartial<AlexandriaConfig>): Promise<AlexandriaConfig>;
+
+  /** The dictionary file's terms, one per entry. */
+  getDictionary(): Promise<string[]>;
+  setDictionary(terms: string[]): Promise<string[]>;
+
+  /** Downloads whisper or the embedding model; progress arrives on onSetupProgress. */
+  runSetupWhisper(model: string): Promise<void>;
+  runSetupEmbeddings(model: string): Promise<void>;
+  onSetupProgress(listener: (progress: SetupProgress) => void): () => void;
+
+  /** Native folder picker, for the watch list. */
+  pickFolder(): Promise<string | undefined>;
+
   stats(): Promise<VaultStats>;
   doctor(): Promise<DoctorCheck[]>;
   vaultPath(): Promise<string>;
@@ -148,6 +177,14 @@ export const IPC = {
   saveAnswer: 'ask:save',
   briefing: 'vault:briefing',
   setTaskDone: 'items:task-done',
+  getConfig: 'config:get',
+  setConfig: 'config:set',
+  getDictionary: 'dict:get',
+  setDictionary: 'dict:set',
+  runSetupWhisper: 'setup:whisper',
+  runSetupEmbeddings: 'setup:embeddings',
+  setupProgress: 'setup:progress',
+  pickFolder: 'vault:pick-folder',
   stats: 'vault:stats',
   doctor: 'vault:doctor',
   vaultPath: 'vault:path',
