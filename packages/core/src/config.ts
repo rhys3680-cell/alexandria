@@ -36,6 +36,8 @@ export interface IngestConfig {
   watchDirs: string[];
   textExtensions: string[];
   audioExtensions: string[];
+  /** Formats read by extracting their text. See `docs/`. */
+  documentExtensions: string[];
 }
 
 export interface SearchConfig {
@@ -99,6 +101,7 @@ export function defaultConfig(vaultDir = defaultVaultDir()): AlexandriaConfig {
         // phone recordings.
         '.webm', '.mp4', '.mov', '.m4v', '.mkv',
       ],
+      documentExtensions: ['.pptx'],
     },
     workspace: {
       dir: path.join(vaultDir, 'workspace'),

@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import zlib from 'node:zlib';
 
 import {
   addTerms,
@@ -28,7 +29,9 @@ import {
   loadEmbeddings,
   openMemoryDatabase,
   parseFrontmatter,
+  parsePptx,
   parseWhisperJson,
+  readZip,
   relatedByFacets,
   retryFailedJobs,
   searchItems,
@@ -1023,4 +1026,103 @@ test('capture to organized, driven by a stubbed model', async () => {
     alx.close();
     fs.rmSync(vaultDir, { recursive: true, force: true });
   }
+});
+
+// ------------------------------------------------------------------ 문서 추출
+
+/**
+ * Builds a zip in memory so the pptx tests need no binary fixture.
+ *
+ * The local header is given a longer extra field than the central one on
+ * purpose: real Office files do this, and a reader that trusts the central
+ * length reads from the wrong offset and inflates garbage.
+ */
+function buildZip(files) {
+  const chunks = [];
+  const central = [];
+  let offset = 0;
+
+  for (const [name, content] of Object.entries(files)) {
+    const nameBytes = Buffer.from(name, 'utf8');
+    const body = Buffer.from(content, 'utf8');
+    const deflated = zlib.deflateRawSync(body);
+    const crc = zlib.crc32(body);
+    const localExtra = Buffer.alloc(9, 0);
+
+    const local = Buffer.alloc(30);
+    local.writeUInt32LE(0x04034b50, 0);
+    local.writeUInt16LE(8, 8);
+    local.writeUInt32LE(crc, 14);
+    local.writeUInt32LE(deflated.length, 18);
+    local.writeUInt32LE(body.length, 22);
+    local.writeUInt16LE(nameBytes.length, 26);
+    local.writeUInt16LE(localExtra.length, 28);
+
+    const entry = Buffer.alloc(46);
+    entry.writeUInt32LE(0x02014b50, 0);
+    entry.writeUInt16LE(8, 10);
+    entry.writeUInt32LE(crc, 16);
+    entry.writeUInt32LE(deflated.length, 20);
+    entry.writeUInt32LE(body.length, 24);
+    entry.writeUInt16LE(nameBytes.length, 28);
+    entry.writeUInt32LE(offset, 42);
+    central.push(Buffer.concat([entry, nameBytes]));
+
+    chunks.push(local, nameBytes, localExtra, deflated);
+    offset += 30 + nameBytes.length + localExtra.length + deflated.length;
+  }
+
+  const directory = Buffer.concat(central);
+  const end = Buffer.alloc(22);
+  end.writeUInt32LE(0x06054b50, 0);
+  end.writeUInt16LE(central.length, 8);
+  end.writeUInt16LE(central.length, 10);
+  end.writeUInt32LE(directory.length, 12);
+  end.writeUInt32LE(offset, 16);
+
+  return Buffer.concat([...chunks, directory, end]);
+}
+
+const slideXml = (body) =>
+  `<?xml version="1.0"?><p:sld xmlns:a="x"><p:cSld><p:spTree>${body}</p:spTree></p:cSld></p:sld>`;
+const para = (...runs) => `<a:p>${runs.join('')}</a:p>`;
+const run = (text) => `<a:t>${text}</a:t>`;
+
+test('a deck becomes markdown in slide order, titles first', () => {
+  const long = '이 장은 제목이라기에는 너무 긴 문장이라서 그대로 본문으로 남아야 합니다. 여든 자를 넘기면 제목으로 올리지 않습니다.';
+  const buffer = buildZip({
+    '[Content_Types].xml': '<Types/>',
+    'ppt/slides/slide1.xml': slideXml(para(run('첫 장')) + para(run('A &amp; B')) + para(run('둘째 줄'))),
+    'ppt/slides/slide2.xml': slideXml(para(run(long))),
+    // Numeric order, not lexicographic: this must land last, not between 1 and 2.
+    'ppt/slides/slide10.xml': slideXml(
+      para('<a:fld id="1" type="slidenum">' + run('10') + '</a:fld>', run('끝'), '<a:br/>', run('고맙습니다')),
+    ),
+    'ppt/notesSlides/notesSlide1.xml': slideXml(para(run('발표자만 보는 메모'))),
+    // The notes part is numbered 1 but belongs to slide 2 — only the
+    // relationship says so, and guessing by number would misfile it.
+    'ppt/notesSlides/_rels/notesSlide1.xml.rels':
+      '<Relationships><Relationship Id="rId1" Target="../slides/slide2.xml"/></Relationships>',
+  });
+
+  const deck = parsePptx(buffer);
+  assert.equal(deck.slideCount, 3);
+  assert.equal(deck.textSlideCount, 3);
+
+  assert.equal(
+    deck.text,
+    ['## 첫 장', '', 'A & B', '둘째 줄', '', long, '', '> 발표자만 보는 메모', '', '## 끝', '', '고맙습니다'].join('\n'),
+  );
+
+  // The automatic slide number is a text run like any other; left in, every
+  // deck would start a slide with its own page number.
+  assert.ok(!deck.text.includes('10'), deck.text);
+});
+
+test('a deck with no slides is an error, not an empty item', () => {
+  assert.throws(() => parsePptx(buildZip({ 'docProps/app.xml': '<Properties/>' })), /슬라이드/);
+});
+
+test('reading a zip that is not one fails clearly', () => {
+  assert.throws(() => readZip(Buffer.from('이건 zip 이 아닙니다')), /zip/);
 });

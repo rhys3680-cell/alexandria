@@ -64,4 +64,5 @@ Co-Authored-By: ...
 - **레이어 밖 CSS 는 레이어 안 CSS 를 항상 이긴다.** 손CSS 를 `@layer legacy` 로 넣어 `utilities` 아래에 두지 않으면 새 컴포넌트가 전부 옛 규칙에 덮인다
 - **그리드 행 수를 자식 개수에 의존시키지 않는다.** `grid-template-rows: auto 1fr auto` 인 셸에 배너를 하나 더 넣자 배너가 `1fr` 을 가져가 본문이 짓눌렸다. 셸은 flex column 으로 둔다
 - **종료 순서를 가정하지 않는다.** `before-quit` 은 창이 이미 파괴된 뒤에도 온다. 그때 `contentView` 를 만지면 `Object has been destroyed` 가 이벤트 핸들러에서 던져지고 Electron 이 오류 대화상자를 띄운다. 정리 코드는 `isDestroyed()` 를 확인하고 try/catch 로 감싼다
+- **기본 설정을 고쳐도 이미 있는 보관소는 따라오지 않는다.** `loadConfig` 는 저장된 `config.json` 을 기본값 위에 덮으므로, `defaultConfig` 에 확장자를 추가해도 기존 보관소에서는 조용히 무시된다. `.mov` 를 추가하고도 계획이 그대로여서 한참 헤맸다. 목록형 설정을 바꿀 때는 `alx config set` 으로 갱신하는 안내를 함께 낸다
 - **e2e 는 그 경로를 실제로 지나가야 의미가 있다.** 브라우저 패널을 한 번도 열지 않는 테스트는 브라우저 정리 코드를 검증하지 못한다. 수정을 되돌려 테스트가 실패하는지 확인한다

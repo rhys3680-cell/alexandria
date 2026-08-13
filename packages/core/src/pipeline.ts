@@ -11,6 +11,7 @@ import { buildBriefing, type Briefing, type BriefingOptions } from './briefing.j
 import { loadConfig, vendorDir, type AlexandriaConfig } from './config.js';
 import { buildWhisperPrompt, loadDictionary } from './dictionary.js';
 import { openDatabase, type Database } from './db.js';
+import { extractDocument } from './docs/index.js';
 import { newId } from './ids.js';
 import {
   claimNextJob,
@@ -192,6 +193,14 @@ export class Alexandria {
         source,
         sourceRef: filePath,
       });
+    }
+    if (this.config.ingest.documentExtensions.includes(extension)) {
+      // The extracted text is the item. The original stays where it is —
+      // copying a deck into the vault would carry tens of megabytes of images
+      // that nothing here ever reads, and `sourceRef` still points home.
+      const extracted = extractDocument(filePath);
+      this.logger.info('문서 추출', { file: path.basename(filePath), note: extracted.note });
+      return this.captureText({ text: extracted.text, source, sourceRef: filePath });
     }
     throw new Error(`지원하지 않는 파일 형식입니다: ${extension || filePath}`);
   }

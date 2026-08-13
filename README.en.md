@@ -393,7 +393,9 @@ Printing the plan first is the default for a reason: at a few hundred files the 
 - **Re-running over the same folder is safe.** Anything already taken in is recognised by its source path and skipped.
 - **Audio and video are copied into the vault**, because the vault is the source of truth — which costs disk. `--text-only` takes just the writing first.
 - **Export stubs are filtered out.** `--min-size 300` skips title-only fragments. In a real Notion export, 849 of 2,967 files (29%) were under 300 B, and dropping just those took the estimate from $35.75 to $25.68.
-- **Which extensions count is configuration.** Text is `.md .txt .markdown`; audio and video is `.wav .mp3 .m4a .ogg .flac .opus .aac .webm .mp4 .mov .m4v .mkv`. **PDF, docx, pptx, images and CSV are not supported yet.**
+- **Which extensions count is configuration.** Text is `.md .txt .markdown`; audio and video is `.wav .mp3 .m4a .ogg .flac .opus .aac .webm .mp4 .mov .m4v .mkv`; documents is `.pptx`.
+- **Presentations come in as their words.** A `.pptx` is a zip of XML, so the builtin `zlib` opens one and no dependency is added. Titles, body, tables and speaker notes become markdown in slide order, and the original stays where it is — `sourceRef` points at it. Measured: a 34 MB, 25-slide deck took 86 ms. The item is text, so images and layout are not kept.
+- **PDF, docx, images and CSV are not supported yet.** For PDF the reason is real: Korean documents embed subset fonts with custom encodings, so without the `ToUnicode` table there are no characters to read (measured: 0 from a résumé, 130k of metadata noise from a lecture deck). Doing it properly needs a parser. CSV is a different story — a Notion export's CSVs are database views, and **79%** of their data rows already exist as pages with the same name. Importing them would put two copies of the same thing in the vault. Not supporting them is the correct behaviour.
 - **An existing vault does not pick up new defaults.** The saved config wins, so update it with `alx config set ingest.audioExtensions '[...]'`.
 
 ## How work flows

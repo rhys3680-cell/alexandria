@@ -5,7 +5,7 @@ import type { Alexandria } from '@alexandria/core';
 export interface Candidate {
   file: string;
   bytes: number;
-  kind: 'text' | 'audio';
+  kind: 'text' | 'audio' | 'doc';
 }
 
 export interface ImportPlan {
@@ -17,6 +17,7 @@ export interface ImportPlan {
   audioBytes: number;
   audioCount: number;
   textCount: number;
+  docCount: number;
 }
 
 /** Directories that never hold anything worth taking in. */
@@ -32,6 +33,7 @@ export function planImport(alx: Alexandria, roots: string[], options: PlanOption
   const { minTextBytes = 0, maxDepth = 12 } = options;
   const textExtensions = new Set(alx.config.ingest.textExtensions);
   const audioExtensions = new Set(alx.config.ingest.audioExtensions);
+  const documentExtensions = new Set(alx.config.ingest.documentExtensions);
   const vaultRoot = path.resolve(alx.config.vaultDir);
 
   const candidates: Candidate[] = [];
@@ -59,7 +61,13 @@ export function planImport(alx: Alexandria, roots: string[], options: PlanOption
       if (!entry.isFile()) continue;
 
       const extension = path.extname(entry.name).toLowerCase();
-      const kind = textExtensions.has(extension) ? 'text' : audioExtensions.has(extension) ? 'audio' : undefined;
+      const kind: Candidate['kind'] | undefined = textExtensions.has(extension)
+        ? 'text'
+        : audioExtensions.has(extension)
+          ? 'audio'
+          : documentExtensions.has(extension)
+            ? 'doc'
+            : undefined;
       if (!kind) continue;
 
       // A second run over the same folder must not duplicate everything.
@@ -70,7 +78,8 @@ export function planImport(alx: Alexandria, roots: string[], options: PlanOption
       try {
         const bytes = fs.statSync(full).size;
         // An export full of title-only stubs would otherwise cost real money to
-        // organize into nothing.
+        // organize into nothing. The floor is only meaningful for plain text:
+        // a deck's size is its images, and says nothing about its words.
         if (kind === 'text' && bytes < minTextBytes) {
           tooSmall++;
           continue;
@@ -84,6 +93,7 @@ export function planImport(alx: Alexandria, roots: string[], options: PlanOption
 
   for (const root of roots) walk(path.resolve(root), 0);
 
+  const count = (kind: Candidate['kind']) => candidates.filter((candidate) => candidate.kind === kind).length;
   const audio = candidates.filter((candidate) => candidate.kind === 'audio');
   return {
     candidates,
@@ -92,7 +102,8 @@ export function planImport(alx: Alexandria, roots: string[], options: PlanOption
     totalBytes: candidates.reduce((sum, candidate) => sum + candidate.bytes, 0),
     audioBytes: audio.reduce((sum, candidate) => sum + candidate.bytes, 0),
     audioCount: audio.length,
-    textCount: candidates.length - audio.length,
+    textCount: count('text'),
+    docCount: count('doc'),
   };
 }
 

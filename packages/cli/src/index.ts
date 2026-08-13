@@ -175,8 +175,10 @@ program
     ) => {
       await withVault(async (alx) => {
         const plan = planImport(alx, dirs, { minTextBytes: options.minSize });
+        // `--text-only` means "nothing that has to be transcribed", so
+        // documents stay in: they cost an organize call like any note.
         const selected = (options.textOnly
-          ? plan.candidates.filter((candidate) => candidate.kind === 'text')
+          ? plan.candidates.filter((candidate) => candidate.kind !== 'audio')
           : plan.candidates
         ).slice(0, options.limit ?? Number.POSITIVE_INFINITY);
 
@@ -194,7 +196,8 @@ program
         console.log(
           color.dim(
             `  글 ${selected.filter((c) => c.kind === 'text').length}건 · ` +
-              `오디오/영상 ${selected.filter((c) => c.kind === 'audio').length}건`,
+              `오디오/영상 ${selected.filter((c) => c.kind === 'audio').length}건 · ` +
+              `문서 ${selected.filter((c) => c.kind === 'doc').length}건`,
           ),
         );
         if (plan.skipped) console.log(color.dim(`  이미 가져온 파일 ${plan.skipped}건은 건너뜁니다.`));
@@ -263,7 +266,11 @@ program
         return;
       }
 
-      const accepted = new Set([...alx.config.ingest.textExtensions, ...alx.config.ingest.audioExtensions]);
+      const accepted = new Set([
+        ...alx.config.ingest.textExtensions,
+        ...alx.config.ingest.audioExtensions,
+        ...alx.config.ingest.documentExtensions,
+      ]);
       const vaultRoot = path.resolve(alx.config.vaultDir);
 
       for (const target of targets) console.log(`${color.cyan('감시 중')}  ${target}`);
