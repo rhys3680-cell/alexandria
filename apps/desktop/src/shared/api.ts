@@ -83,6 +83,12 @@ export interface AlexandriaApi {
   browserCapture(): Promise<Item>;
   onBrowserState(listener: (state: BrowserState) => void): () => void;
 
+  /** Transcribes a spoken question. Does not create a vault item. */
+  transcribeVoice(buffer: ArrayBuffer, extension: string): Promise<string>;
+  /** Reads text aloud through the system voice. */
+  speak(text: string): Promise<void>;
+  stopSpeaking(): Promise<void>;
+
   /** Sends a turn to the model. Text arrives through `onAskChunk` meanwhile. */
   ask(request: AskRequest): Promise<AskResult>;
   saveAnswer(question: string, answer: string): Promise<Item>;
@@ -124,6 +130,9 @@ export const IPC = {
   browserReload: 'browser:reload',
   browserCapture: 'browser:capture',
   browserState: 'browser:state',
+  transcribeVoice: 'voice:transcribe',
+  speak: 'tts:speak',
+  stopSpeaking: 'tts:stop',
   ask: 'ask:send',
   askChunk: 'ask:chunk',
   saveAnswer: 'ask:save',

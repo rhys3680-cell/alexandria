@@ -7,6 +7,8 @@ import {
   Alexandria,
   createLogger,
   describeError,
+  guessLanguage,
+  WindowsSapiSpeaker,
   type Item,
   type ListOptions,
   type PipelineEvent,
@@ -19,6 +21,7 @@ const isDev = !app.isPackaged;
 let alexandria: Alexandria | undefined;
 let mainWindow: BrowserWindow | undefined;
 let inAppBrowser: InAppBrowser | undefined;
+const speaker = new WindowsSapiSpeaker();
 
 function browser(): InAppBrowser {
   if (!inAppBrowser) {
@@ -173,6 +176,24 @@ function registerIpc(): void {
     return item;
   });
 
+  ipcMain.handle(IPC.transcribeVoice, async (_event, buffer: ArrayBuffer, extension: string) => {
+    // A spoken question is not a capture, so it never enters the vault — the
+    // recording lives only as long as the transcription takes.
+    const temporary = path.join(os.tmpdir(), `alexandria-voice-${randomBytes(6).toString('hex')}${extension}`);
+    fs.writeFileSync(temporary, Buffer.from(buffer));
+    try {
+      const result = await vault().transcribeOnce(temporary);
+      return result.text;
+    } finally {
+      fs.rmSync(temporary, { force: true });
+    }
+  });
+
+  ipcMain.handle(IPC.speak, async (_event, text: string) => {
+    await speaker.speak(text, { language: guessLanguage(text) });
+  });
+  ipcMain.handle(IPC.stopSpeaking, async () => speaker.stop());
+
   ipcMain.handle(IPC.ask, async (event, request: AskRequest) => {
     const context = (request.contextIds ?? [])
       .map((id) => vault().get(id))
@@ -248,6 +269,7 @@ if (!app.requestSingleInstanceLock()) {
   });
 
   app.on('before-quit', () => {
+    speaker.stop();
     inAppBrowser?.destroy();
     inAppBrowser = undefined;
     alexandria?.close();

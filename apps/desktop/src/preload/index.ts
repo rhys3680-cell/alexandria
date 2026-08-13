@@ -45,6 +45,11 @@ const api: AlexandriaApi = {
   onBrowserState: (listener) =>
     subscribe(IPC.browserState, (_event, payload) => listener(payload as BrowserState)),
 
+  transcribeVoice: (buffer, extension) =>
+    ipcRenderer.invoke(IPC.transcribeVoice, buffer, extension) as Promise<string>,
+  speak: (text) => ipcRenderer.invoke(IPC.speak, text) as Promise<void>,
+  stopSpeaking: () => ipcRenderer.invoke(IPC.stopSpeaking) as Promise<void>,
+
   ask: (request) => ipcRenderer.invoke(IPC.ask, request) as Promise<AskResult>,
   saveAnswer: (question, answer) => ipcRenderer.invoke(IPC.saveAnswer, question, answer) as Promise<Item>,
   onAskChunk: (listener) => subscribe(IPC.askChunk, (_event, payload) => listener(payload as AskChunk)),

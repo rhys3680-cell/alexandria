@@ -741,3 +741,9 @@ button:disabled {
   font-size: 11px;
   color: var(--text-dim);
 }
+
+.chip.listening {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #fff;
+}

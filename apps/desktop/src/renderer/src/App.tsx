@@ -516,6 +516,11 @@ function Console({
   const [tools, setTools] = useState<ToolAccess>('none');
   const [useContext, setUseContext] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [listening, setListening] = useState(false);
+  const [transcribing, setTranscribing] = useState(false);
+  const [readAloud, setReadAloud] = useState(false);
+  const recorderRef = useRef<MediaRecorder | undefined>(undefined);
+  const chunksRef = useRef<Blob[]>([]);
   const sessionRef = useRef<string | undefined>(undefined);
   const streamIdRef = useRef<string | undefined>(undefined);
   const endRef = useRef<HTMLDivElement | null>(null);
@@ -539,8 +544,8 @@ function Console({
     endRef.current?.scrollIntoView({ block: 'end' });
   }, [turns]);
 
-  const send = async () => {
-    const question = draft.trim();
+  const send = async (spoken?: string) => {
+    const question = (spoken ?? draft).trim();
     if (!question || busy) return;
 
     const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -558,6 +563,7 @@ function Console({
         resume: sessionRef.current,
       });
       sessionRef.current = result.sessionId ?? sessionRef.current;
+      if (readAloud && result.text) void window.alexandria.speak(result.text);
       setTurns((current) => {
         const next = [...current];
         const last = next[next.length - 1];
@@ -577,6 +583,48 @@ function Console({
       streamIdRef.current = undefined;
       setBusy(false);
     }
+  };
+
+  const startListening = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      chunksRef.current = [];
+
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) chunksRef.current.push(event.data);
+      };
+      recorder.onstop = async () => {
+        for (const track of stream.getTracks()) track.stop();
+        const blob = new Blob(chunksRef.current, { type: recorder.mimeType });
+        if (blob.size === 0) return;
+
+        setTranscribing(true);
+        try {
+          const text = await window.alexandria.transcribeVoice(await blob.arrayBuffer(), '.webm');
+          // Sent straight through: the transcript shows up as the user's turn,
+          // so a misheard question is visible rather than silently answered.
+          if (text.trim()) await send(text);
+          else onNotice('말소리를 알아듣지 못했습니다.');
+        } catch (error) {
+          onNotice(`음성 인식 실패: ${(error as Error).message}`);
+        } finally {
+          setTranscribing(false);
+        }
+      };
+
+      recorder.start();
+      recorderRef.current = recorder;
+      setListening(true);
+    } catch (error) {
+      onNotice(`마이크를 열 수 없습니다: ${(error as Error).message}`);
+    }
+  };
+
+  const stopListening = () => {
+    recorderRef.current?.stop();
+    recorderRef.current = undefined;
+    setListening(false);
   };
 
   const save = async (index: number) => {
@@ -634,6 +682,23 @@ function Console({
               {mode.label}
             </button>
           ))}
+          <button
+            className={listening ? 'chip listening' : 'chip'}
+            onClick={() => (listening ? stopListening() : void startListening())}
+            disabled={transcribing || busy}
+            title="말로 물어보기"
+          >
+            {listening ? '■ 듣는 중' : transcribing ? '옮기는 중…' : '🎤 말하기'}
+          </button>
+          <label className="context-toggle" title="답변을 소리로 읽어줍니다 (시작까지 2~3초)">
+            <input type="checkbox" checked={readAloud} onChange={(e) => setReadAloud(e.target.checked)} />
+            읽어주기
+          </label>
+          {readAloud ? (
+            <button className="link" onClick={() => void window.alexandria.stopSpeaking()}>
+              그만
+            </button>
+          ) : undefined}
           {contextItem ? (
             <label className="context-toggle" title={contextItem.title ?? contextItem.id}>
               <input type="checkbox" checked={useContext} onChange={(e) => setUseContext(e.target.checked)} />이 항목을
