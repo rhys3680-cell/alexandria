@@ -12,7 +12,17 @@ export const ITEM_KINDS = [
 ] as const;
 export type ItemKind = (typeof ITEM_KINDS)[number];
 
-export const ITEM_SOURCES = ['manual', 'file', 'mic', 'watch', 'clipboard'] as const;
+export const ITEM_SOURCES = [
+  'manual',
+  'file',
+  'mic',
+  'watch',
+  'clipboard',
+  /** Saved out of a console conversation. */
+  'assistant',
+  /** Captured from a web page. */
+  'web',
+] as const;
 export type ItemSource = (typeof ITEM_SOURCES)[number];
 
 /**

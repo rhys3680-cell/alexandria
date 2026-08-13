@@ -1,5 +1,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import {
+  buildAskPrompt,
+  buildAskSystemPrompt,
+  formatAnswerForVault,
+  type AskInput,
+  type AskResult,
+} from './ask.js';
 import { buildBriefing, type Briefing, type BriefingOptions } from './briefing.js';
 import { loadConfig, vendorDir, type AlexandriaConfig } from './config.js';
 import { buildWhisperPrompt, loadDictionary } from './dictionary.js';
@@ -93,7 +100,7 @@ export class Alexandria {
     this.vault = new Vault(this.config.vaultDir);
     this.vault.ensure();
     this.db = deps.db ?? openDatabase(this.config.vaultDir);
-    this.llm = deps.llm ?? new ClaudeCliAdapter(this.config.llm);
+    this.llm = deps.llm ?? new ClaudeCliAdapter(this.config.llm, this.config.vaultDir);
     this.transcriber = deps.transcriber ?? new WhisperCppTranscriber(this.config.stt);
     this.embedder =
       deps.embedder ?? new TransformersEmbedder(this.config.search, vendorDir(this.config.vaultDir));
@@ -457,6 +464,47 @@ export class Alexandria {
 
   tags(limit?: number): { tag: string; count: number }[] {
     return store.allTags(this.db, limit);
+  }
+
+  /**
+   * Free-form conversation with the same model the organize pass uses.
+   *
+   * Tool access is the caller's choice because it is the cost lever: 190 input
+   * tokens with none, ~1,900 with web, ~3,200 with vault reads. Sessions are
+   * persisted so `resume` can continue an exchange without resending it.
+   */
+  async ask(input: AskInput): Promise<AskResult> {
+    const question = input.prompt.trim();
+    if (!question) throw new Error('빈 질문은 보낼 수 없습니다.');
+
+    const request = {
+      system: buildAskSystemPrompt(input.tools ?? 'none'),
+      prompt: buildAskPrompt({ ...input, prompt: question }),
+      tools: input.tools ?? 'none',
+      resume: input.resume,
+      persist: true,
+    };
+
+    const response = input.onText
+      ? await this.llm.stream(request, input.onText)
+      : await this.llm.complete(request);
+
+    this.logger.info('대화', { tools: request.tools, costUsd: response.costUsd });
+    return {
+      text: response.text,
+      costUsd: response.costUsd,
+      durationMs: response.durationMs,
+      sessionId: response.sessionId,
+    };
+  }
+
+  /** Stores a question and its answer as a normal item, so it gets organized. */
+  saveAnswer(question: string, answer: string, sourceRef?: string): Item {
+    return this.captureText({
+      text: formatAnswerForVault(question, answer),
+      source: 'assistant',
+      sourceRef,
+    });
   }
 
   /**
