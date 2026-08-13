@@ -29,6 +29,8 @@ import {
   type SearchHit,
   type SearchMode,
   type ToolAccess,
+  WindowsSapiSpeaker,
+  guessLanguage,
   type WhisperModel,
 } from '@alexandria/core';
 import {
@@ -392,10 +394,18 @@ program
   .option('--search <query>', '검색 상위 결과를 문맥으로 넣습니다')
   .option('-n, --context <count>', '--search 로 넣을 개수', (value) => Number.parseInt(value, 10), 5)
   .option('--save', '질문과 답변을 보관소에 저장합니다')
+  .option('--speak', '답변을 소리로 읽어줍니다')
   .action(
     async (
       questionParts: string[],
-      options: { tools: string; item?: string[]; search?: string; context: number; save?: boolean },
+      options: {
+        tools: string;
+        item?: string[];
+        search?: string;
+        context: number;
+        save?: boolean;
+        speak?: boolean;
+      },
     ) => {
       const tools = options.tools as ToolAccess;
       if (!['none', 'web', 'vault'].includes(tools)) {
@@ -432,6 +442,13 @@ program
         });
 
         console.log(color.dim(`\n\n비용 환산 $${result.costUsd.toFixed(4)} · ${(result.durationMs / 1000).toFixed(1)}s`));
+
+        if (options.speak) {
+          const speaker = new WindowsSapiSpeaker();
+          const problem = await speaker.check();
+          if (problem) console.error(color.yellow(problem));
+          else await speaker.speak(result.text, { language: guessLanguage(result.text) });
+        }
 
         if (options.save) {
           const item = alx.saveAnswer(question, result.text);
