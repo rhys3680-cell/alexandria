@@ -77,6 +77,70 @@ export function run(file: string, args: string[], options: RunOptions = {}): Pro
   });
 }
 
+export interface StreamOptions extends RunOptions {
+  /** Called once per complete line of stdout, as it arrives. */
+  onLine: (line: string) => void;
+}
+
+/**
+ * Like `run`, but hands stdout to the caller line by line while the process is
+ * still going. Used for NDJSON streams, where waiting for exit would defeat the
+ * point.
+ */
+export function runStreaming(file: string, args: string[], options: StreamOptions): Promise<RunResult> {
+  const startedAt = Date.now();
+
+  return new Promise((resolve, reject) => {
+    const child = spawn(file, args, {
+      cwd: options.cwd,
+      env: options.env ?? process.env,
+      windowsHide: true,
+    });
+
+    let pending = '';
+    let stderr = '';
+    let timedOut = false;
+
+    const timer = options.timeoutMs
+      ? setTimeout(() => {
+          timedOut = true;
+          child.kill();
+          setTimeout(() => child.kill('SIGKILL'), 3000).unref();
+        }, options.timeoutMs)
+      : undefined;
+
+    child.stdout.setEncoding('utf8');
+    child.stderr.setEncoding('utf8');
+
+    child.stdout.on('data', (chunk: string) => {
+      pending += chunk;
+      const lines = pending.split('\n');
+      // The trailing element is an incomplete line; keep it for the next chunk.
+      pending = lines.pop() ?? '';
+      for (const line of lines) {
+        if (line.trim()) options.onLine(line);
+      }
+    });
+    child.stderr.on('data', (chunk: string) => {
+      stderr += chunk;
+    });
+
+    child.on('error', (error) => {
+      if (timer) clearTimeout(timer);
+      reject(error);
+    });
+
+    child.on('close', (code) => {
+      if (timer) clearTimeout(timer);
+      if (pending.trim()) options.onLine(pending);
+      resolve({ code, stdout: '', stderr, timedOut, durationMs: Date.now() - startedAt });
+    });
+
+    if (options.input !== undefined) child.stdin.write(options.input);
+    child.stdin.end();
+  });
+}
+
 export async function runOrThrow(file: string, args: string[], options: RunOptions = {}): Promise<RunResult> {
   const result = await run(file, args, options);
   if (result.timedOut) {
