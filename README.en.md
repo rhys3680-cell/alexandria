@@ -392,7 +392,9 @@ Printing the plan first is the default for a reason: at a few hundred files the 
 
 - **Re-running over the same folder is safe.** Anything already taken in is recognised by its source path and skipped.
 - **Audio and video are copied into the vault**, because the vault is the source of truth — which costs disk. `--text-only` takes just the writing first.
-- **Which extensions count is configuration.** By default text is `.md .txt .markdown` and audio/video is `.wav .mp3 .m4a .ogg .flac .webm .mp4`. **PDF, docx, pptx and images are not supported yet.**
+- **Export stubs are filtered out.** `--min-size 300` skips title-only fragments. In a real Notion export, 849 of 2,967 files (29%) were under 300 B, and dropping just those took the estimate from $35.75 to $25.68.
+- **Which extensions count is configuration.** Text is `.md .txt .markdown`; audio and video is `.wav .mp3 .m4a .ogg .flac .opus .aac .webm .mp4 .mov .m4v .mkv`. **PDF, docx, pptx, images and CSV are not supported yet.**
+- **An existing vault does not pick up new defaults.** The saved config wins, so update it with `alx config set ingest.audioExtensions '[...]'`.
 
 ## How work flows
 

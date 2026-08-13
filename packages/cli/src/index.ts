@@ -166,14 +166,15 @@ program
   .option('--yes', '실제로 가져옵니다')
   .option('--limit <count>', '이번에 가져올 최대 개수', (value) => Number.parseInt(value, 10))
   .option('--text-only', '오디오·영상은 건너뜁니다')
+  .option('--min-size <bytes>', '이보다 작은 글 파일은 건너뜁니다 (내보내기의 빈 페이지 제거)', (value) => Number.parseInt(value, 10), 0)
   .option('--now', '가져온 뒤 곧바로 전사·정리까지 실행')
   .action(
     async (
       dirs: string[],
-      options: { yes?: boolean; limit?: number; textOnly?: boolean; now?: boolean },
+      options: { yes?: boolean; limit?: number; textOnly?: boolean; now?: boolean; minSize: number },
     ) => {
       await withVault(async (alx) => {
-        const plan = planImport(alx, dirs);
+        const plan = planImport(alx, dirs, { minTextBytes: options.minSize });
         const selected = (options.textOnly
           ? plan.candidates.filter((candidate) => candidate.kind === 'text')
           : plan.candidates
@@ -197,6 +198,9 @@ program
           ),
         );
         if (plan.skipped) console.log(color.dim(`  이미 가져온 파일 ${plan.skipped}건은 건너뜁니다.`));
+        if (plan.tooSmall) {
+          console.log(color.dim(`  ${options.minSize}B 미만인 글 ${plan.tooSmall}건은 건너뜁니다.`));
+        }
 
         console.log('');
         console.log(`${color.bold('예상')}`);

@@ -92,7 +92,13 @@ export function defaultConfig(vaultDir = defaultVaultDir()): AlexandriaConfig {
     ingest: {
       watchDirs: [],
       textExtensions: ['.md', '.txt', '.markdown'],
-      audioExtensions: ['.wav', '.mp3', '.m4a', '.ogg', '.flac', '.webm', '.mp4'],
+      audioExtensions: [
+        '.wav', '.mp3', '.m4a', '.ogg', '.flac', '.opus', '.aac',
+        // Video containers: ffmpeg extracts the audio track, which is all
+        // transcription needs. Leaving .mov out quietly skipped screen and
+        // phone recordings.
+        '.webm', '.mp4', '.mov', '.m4v', '.mkv',
+      ],
     },
     workspace: {
       dir: path.join(vaultDir, 'workspace'),

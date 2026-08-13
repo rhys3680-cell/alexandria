@@ -11,6 +11,8 @@ export interface Candidate {
 export interface ImportPlan {
   candidates: Candidate[];
   skipped: number;
+  /** Text files left behind for being under the size floor. */
+  tooSmall: number;
   totalBytes: number;
   audioBytes: number;
   audioCount: number;
@@ -20,13 +22,21 @@ export interface ImportPlan {
 /** Directories that never hold anything worth taking in. */
 const IGNORED = new Set(['node_modules', '.git', '.alexandria', 'items', 'media', '$RECYCLE.BIN']);
 
-export function planImport(alx: Alexandria, roots: string[], maxDepth = 12): ImportPlan {
+export interface PlanOptions {
+  /** Text files smaller than this are left behind. */
+  minTextBytes?: number;
+  maxDepth?: number;
+}
+
+export function planImport(alx: Alexandria, roots: string[], options: PlanOptions = {}): ImportPlan {
+  const { minTextBytes = 0, maxDepth = 12 } = options;
   const textExtensions = new Set(alx.config.ingest.textExtensions);
   const audioExtensions = new Set(alx.config.ingest.audioExtensions);
   const vaultRoot = path.resolve(alx.config.vaultDir);
 
   const candidates: Candidate[] = [];
   let skipped = 0;
+  let tooSmall = 0;
 
   const walk = (dir: string, depth: number): void => {
     if (depth > maxDepth) return;
@@ -58,7 +68,14 @@ export function planImport(alx: Alexandria, roots: string[], maxDepth = 12): Imp
         continue;
       }
       try {
-        candidates.push({ file: full, bytes: fs.statSync(full).size, kind });
+        const bytes = fs.statSync(full).size;
+        // An export full of title-only stubs would otherwise cost real money to
+        // organize into nothing.
+        if (kind === 'text' && bytes < minTextBytes) {
+          tooSmall++;
+          continue;
+        }
+        candidates.push({ file: full, bytes, kind });
       } catch {
         // Vanished between listing and stat; nothing to import.
       }
@@ -71,6 +88,7 @@ export function planImport(alx: Alexandria, roots: string[], maxDepth = 12): Imp
   return {
     candidates,
     skipped,
+    tooSmall,
     totalBytes: candidates.reduce((sum, candidate) => sum + candidate.bytes, 0),
     audioBytes: audio.reduce((sum, candidate) => sum + candidate.bytes, 0),
     audioCount: audio.length,
