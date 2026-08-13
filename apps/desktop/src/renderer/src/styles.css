@@ -1,3 +1,8 @@
+/*
+ * This app's own component classes, loaded into the `app` layer by
+ * tailwind.css. Utilities out-rank everything here, so a Tailwind class on an
+ * element always wins over these rules.
+ */
 :root {
   --bg: #faf9f7;
   --panel: #ffffff;
@@ -30,15 +35,10 @@
   }
 }
 
-* {
-  box-sizing: border-box;
-}
-
 body,
 html,
 #root {
   height: 100%;
-  margin: 0;
 }
 
 body {
@@ -52,9 +52,11 @@ body {
   text-rendering: optimizeLegibility;
 }
 
-button {
-  font: inherit;
-  cursor: pointer;
+/*
+ * Opted into by the plain buttons this app still draws by hand. It used to be
+ * a bare `button` rule, which meant every shadcn component had to fight it.
+ */
+.btn {
   border: 1px solid var(--line);
   background: var(--panel);
   color: var(--text);
@@ -63,7 +65,7 @@ button {
   transition: background 0.12s ease, border-color 0.12s ease;
 }
 
-button:hover:not(:disabled) {
+.btn:hover:not(:disabled) {
   border-color: var(--accent);
 }
 
@@ -340,6 +342,7 @@ button:disabled {
   margin: 0;
   padding-left: 18px;
   line-height: 1.7;
+  list-style: disc;
 }
 
 .due {
@@ -792,6 +795,7 @@ button:disabled {
   margin: 6px 0;
   padding-left: 18px;
   line-height: 1.9;
+  list-style: disc;
 }
 
 .setup-banner code {

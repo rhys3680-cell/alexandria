@@ -385,12 +385,20 @@ captureAudio ─→ transcribe ─→ ────────┘
 
 Korean is the primary script here, so **Pretendard** is bundled (one 2 MB variable file, works offline).
 
-Components are moving to **Tailwind v4 + shadcn/ui**, applied to new screens first. The migration is deliberately gradual:
+Built with **Tailwind v4 + shadcn/ui**, with every style inside one layer order.
 
-- **Preflight is off.** Tailwind's global reset changes list markers, button defaults and typography all at once, which would restyle every screen still drawn by hand-written CSS. When the last of that CSS is gone, switching to `@import 'tailwindcss'` brings the reset back.
-- **One palette.** `@theme inline` points at the CSS variables that already exist (`--bg`, `--accent`, …), so Tailwind classes and hand-written rules cannot drift, and dark mode keeps working through the existing media query.
+```
+base       Tailwind's reset (preflight)
+app        this project's component classes
+utilities  Tailwind utilities, which win — a class on the element is the most
+           specific statement of intent
+```
 
-Migrated so far: the edit-item dialog, the settings screen, and the detail view's actions.
+The layer order is the whole design. **Unlayered CSS beats every layer**, and while the hand-written styles sat outside one, a bare `button` rule quietly overrode Tailwind utilities on the new components. Everything is layered now, and because `app` comes after `base`, preflight can be on while the app's own rules still say the final word.
+
+**One palette.** `@theme inline` points at the CSS variables (`--bg`, `--accent`, …), so component classes and Tailwind classes cannot drift, and dark mode keeps working through the existing media query.
+
+Controls — dialogs, buttons, inputs — use shadcn primitives. Dialog is where Radix earns its place: focus trapping, focus restore, Escape and the aria wiring.
 
 ## Settings
 
@@ -434,6 +442,5 @@ pnpm test
 
 Capture, organizing, briefing, search, related records, speech, the console, the browser and packaging all work. Remaining:
 
-- **Finish the UI migration** — move the remaining hand-written CSS to Tailwind and turn preflight on
 - **Code signing** — the installer is unsigned today, so SmartScreen warns on first run
 - **Korean → non-Korean retrieval** — the one direction that consistently failed above

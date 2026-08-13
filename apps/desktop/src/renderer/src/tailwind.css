@@ -1,31 +1,32 @@
 /*
- * Tailwind is brought in without preflight on purpose.
+ * The renderer's single stylesheet entry.
  *
- * The app already has ~750 lines of hand-written CSS that this is meant to
- * replace one screen at a time. Preflight resets list markers, button styling
- * and typography globally, so enabling it would restyle every screen at once —
- * exactly the big-bang change an incremental migration is trying to avoid.
- * Once the last hand-written rule is gone, swap these imports for
- * `@import 'tailwindcss'` and get the reset back.
+ * Layer order is the whole design. Unlayered CSS beats every layer, so while
+ * the hand-written styles sat outside one, their bare `button` rule quietly
+ * overrode every Tailwind utility on the new components. Everything is layered
+ * now, in the order Tailwind expects:
+ *
+ *   base       Tailwind's reset
+ *   app        this project's own component classes
+ *   utilities  Tailwind utilities, which win — a class on the element is the
+ *              most specific statement of intent, so it should
+ *
+ * `preflight` is on. It can be, because `app` sits after `base`: the reset
+ * establishes defaults and the app's own rules still say the final word on
+ * anything they mention.
  */
-/*
- * Layer order matters more than it looks. Unlayered CSS beats *any* layered
- * CSS, so while styles.css sat outside a layer its bare `button { padding }`
- * rule overrode every Tailwind utility on the new components. Putting the
- * hand-written CSS in `legacy`, below `utilities`, lets a migrated component
- * style itself while unmigrated screens keep rendering exactly as before.
- */
-@layer theme, base, legacy, components, utilities;
+@layer theme, base, app, components, utilities;
 
 @import 'pretendard/dist/web/variable/pretendardvariable.css';
 @import 'tailwindcss/theme.css' layer(theme);
-@import './styles.css' layer(legacy);
+@import 'tailwindcss/preflight.css' layer(base);
+@import './styles.css' layer(app);
 @import 'tailwindcss/utilities.css' layer(utilities);
 
 /*
- * One palette for both systems. These point at the variables styles.css
- * already defines, so a Tailwind class and a hand-written rule cannot drift,
- * and dark mode keeps working through the existing media query.
+ * One palette for both. These point at the variables styles.css defines, so a
+ * Tailwind class and a hand-written rule cannot drift, and dark mode keeps
+ * working through the existing media query.
  */
 @theme inline {
   --color-bg: var(--bg);

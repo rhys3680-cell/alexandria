@@ -111,7 +111,7 @@ export function App(): React.JSX.Element {
       <header className="header">
         <div className="brand">Alexandria</div>
         <button
-          className={pane === 'auto' && !selected ? 'today active' : 'today'}
+          className={`btn today${pane === 'auto' && !selected ? ' active' : ''}`}
           onClick={() => {
             setPane('auto');
             setSelectedId(undefined);
@@ -124,14 +124,14 @@ export function App(): React.JSX.Element {
           ) : undefined}
         </button>
         <button
-          className={pane === 'console' ? 'today active' : 'today'}
+          className={`btn today${pane === 'console' ? ' active' : ''}`}
           onClick={() => setPane((current) => (current === 'console' ? 'auto' : 'console'))}
           title="모델과 대화하기"
         >
           대화
         </button>
         <button
-          className={pane === 'browser' ? 'today active' : 'today'}
+          className={`btn today${pane === 'browser' ? ' active' : ''}`}
           onClick={() => setPane((current) => (current === 'browser' ? 'auto' : 'browser'))}
           title="앱 안에서 웹 보기"
         >
@@ -292,7 +292,7 @@ function Composer({
       />
       <div className="composer-actions">
         <span className="hint">Ctrl+Enter 로 저장 · 파일을 끌어다 놓아도 됩니다</span>
-        <button onClick={() => void save()} disabled={!text.trim() || saving}>
+        <button className="btn" onClick={() => void save()} disabled={!text.trim() || saving}>
           {saving ? '저장 중…' : '저장'}
         </button>
       </div>
@@ -375,7 +375,7 @@ function Recorder({
           ))}
         </select>
       ) : undefined}
-      <button className={recording ? 'record active' : 'record'} onClick={() => (recording ? stop() : void start())}>
+      <button className={`btn record${recording ? ' active' : ''}`} onClick={() => (recording ? stop() : void start())}>
         {recording ? `■ ${formatSeconds(seconds)}` : '● 녹음'}
       </button>
     </div>
@@ -515,13 +515,13 @@ function BrowserPanel({
   return (
     <div className="browser">
       <div className="browser-bar">
-        <button className="nav" disabled={!state.canGoBack} onClick={() => void window.alexandria.browserBack()}>
+        <button className="btn nav" disabled={!state.canGoBack} onClick={() => void window.alexandria.browserBack()}>
           ←
         </button>
-        <button className="nav" disabled={!state.canGoForward} onClick={() => void window.alexandria.browserForward()}>
+        <button className="btn nav" disabled={!state.canGoForward} onClick={() => void window.alexandria.browserForward()}>
           →
         </button>
-        <button className="nav" onClick={() => void window.alexandria.browserReload()} title="새로고침">
+        <button className="btn nav" onClick={() => void window.alexandria.browserReload()} title="새로고침">
           ↻
         </button>
         <input
@@ -536,7 +536,7 @@ function BrowserPanel({
             if (event.key === 'Enter') go();
           }}
         />
-        <button onClick={() => void capture()} disabled={!state.url || capturing}>
+        <button className="btn" onClick={() => void capture()} disabled={!state.url || capturing}>
           {capturing ? '담는 중…' : '보관소에 담기'}
         </button>
       </div>
@@ -774,7 +774,7 @@ function Console({
           {TOOL_MODES.map((mode) => (
             <button
               key={mode.value}
-              className={tools === mode.value ? 'chip active' : 'chip'}
+              className={`btn chip${tools === mode.value ? ' active' : ''}`}
               title={mode.hint}
               onClick={() => setTools(mode.value)}
             >
@@ -782,7 +782,7 @@ function Console({
             </button>
           ))}
           <button
-            className={listening ? 'chip listening' : 'chip'}
+            className={`btn chip${listening ? ' listening' : ''}`}
             onClick={() => (listening ? stopListening() : void startListening())}
             disabled={transcribing || busy || !voiceReady}
             title={voiceReady ? '말로 물어보기' : '음성 인식이 설치되지 않았습니다: pnpm alx setup whisper'}
@@ -833,7 +833,7 @@ function Console({
         />
         <div className="composer-actions">
           <span className="hint">{TOOL_MODES.find((mode) => mode.value === tools)?.hint}</span>
-          <button onClick={() => void send()} disabled={!draft.trim() || busy}>
+          <button className="btn" onClick={() => void send()} disabled={!draft.trim() || busy}>
             {busy ? '답변 중…' : '보내기'}
           </button>
         </div>
