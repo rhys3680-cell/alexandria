@@ -13,3 +13,4 @@ release-*/
 
 # downloaded STT assets
 vendor/
+e2e/screenshots/

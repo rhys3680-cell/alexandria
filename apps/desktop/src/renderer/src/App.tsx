@@ -186,7 +186,7 @@ export function App(): React.JSX.Element {
           />
         </section>
         {/* The console and browser own their full height; only the reading views scroll. */}
-        <section className={pane === 'auto' ? 'right' : 'right fixed'}>
+        <section className={pane === 'auto' ? 'right' : 'right right-fills'}>
           {pane === 'browser' ? (
             <BrowserPanel
               active

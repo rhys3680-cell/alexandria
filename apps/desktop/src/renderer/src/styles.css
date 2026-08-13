@@ -1,10 +1,3 @@
-/*
- * Pretendard, bundled rather than fetched: this is a desktop app that has to
- * look right offline. The variable file is one 2 MB asset covering every
- * weight, which beats the dynamic subset when the font loads from local disk.
- */
-@import 'pretendard/dist/web/variable/pretendardvariable.css';
-
 :root {
   --bg: #faf9f7;
   --panel: #ffffff;
@@ -79,10 +72,26 @@ button:disabled {
   cursor: default;
 }
 
+/*
+ * Flex rather than grid rows on purpose. With `grid-template-rows: auto 1fr
+ * auto` the row assignment depends on how many children happen to render, so
+ * adding the setup banner handed it the 1fr row and collapsed the body. A
+ * column of fixed-size bars around one growing region cannot break that way.
+ */
 .app {
-  display: grid;
-  grid-template-rows: auto 1fr auto;
+  display: flex;
+  flex-direction: column;
   height: 100%;
+}
+
+.header,
+.setup-banner,
+.footer {
+  flex: none;
+}
+
+.body {
+  flex: 1;
 }
 
 /* ------------------------------------------------------------------ header */
@@ -142,8 +151,16 @@ button:disabled {
   overflow-y: auto;
 }
 
-/* The console and the browser lay themselves out to the full pane height. */
-.right.fixed {
+/*
+ * The console and the browser lay themselves out to the full pane height.
+ *
+ * Named `right-fills` rather than `fixed`: Tailwind owns a huge flat namespace
+ * of utility class names, and `fixed` is one of them — `position: fixed`. Once
+ * utilities out-rank this file, an ad-hoc modifier sharing a utility's name
+ * silently takes on that utility's meaning, which is how the right pane ended
+ * up torn out of the grid.
+ */
+.right.right-fills {
   overflow: hidden;
 }
 

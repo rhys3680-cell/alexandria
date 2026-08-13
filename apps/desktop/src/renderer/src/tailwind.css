@@ -8,9 +8,18 @@
  * Once the last hand-written rule is gone, swap these imports for
  * `@import 'tailwindcss'` and get the reset back.
  */
-@layer theme, base, components, utilities;
+/*
+ * Layer order matters more than it looks. Unlayered CSS beats *any* layered
+ * CSS, so while styles.css sat outside a layer its bare `button { padding }`
+ * rule overrode every Tailwind utility on the new components. Putting the
+ * hand-written CSS in `legacy`, below `utilities`, lets a migrated component
+ * style itself while unmigrated screens keep rendering exactly as before.
+ */
+@layer theme, base, legacy, components, utilities;
 
+@import 'pretendard/dist/web/variable/pretendardvariable.css';
 @import 'tailwindcss/theme.css' layer(theme);
+@import './styles.css' layer(legacy);
 @import 'tailwindcss/utilities.css' layer(utilities);
 
 /*
