@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { Briefing, BriefingTask, Item, RelatedHit, SearchHit } from '@alexandria/core';
+import type { Briefing, BriefingTask, Item, RelatedHit, SearchHit, ToolAccess } from '@alexandria/core';
 import type { DoctorCheck, VaultStats } from '../../shared/api.js';
 
 const STATUS_LABEL: Record<string, string> = {
@@ -20,6 +20,7 @@ export function App(): React.JSX.Element {
   const [briefing, setBriefing] = useState<Briefing | undefined>(undefined);
   const [checks, setChecks] = useState<DoctorCheck[]>([]);
   const [notice, setNotice] = useState<string | undefined>(undefined);
+  const [consoleOpen, setConsoleOpen] = useState(false);
 
   const refresh = useCallback(async () => {
     const [nextItems, nextStats, nextBriefing] = await Promise.all([
@@ -95,14 +96,24 @@ export function App(): React.JSX.Element {
       <header className="header">
         <div className="brand">Alexandria</div>
         <button
-          className={selected ? 'today' : 'today active'}
-          onClick={() => setSelectedId(undefined)}
+          className={!consoleOpen && !selected ? 'today active' : 'today'}
+          onClick={() => {
+            setConsoleOpen(false);
+            setSelectedId(undefined);
+          }}
           title="오늘 챙길 것들"
         >
           오늘
           {briefing && briefing.overdue.length + briefing.today.length > 0 ? (
             <span className="badge">{briefing.overdue.length + briefing.today.length}</span>
           ) : undefined}
+        </button>
+        <button
+          className={consoleOpen ? 'today active' : 'today'}
+          onClick={() => setConsoleOpen((open) => !open)}
+          title="모델과 대화하기"
+        >
+          대화
         </button>
         <input
           className="search"
@@ -126,7 +137,9 @@ export function App(): React.JSX.Element {
           />
         </section>
         <section className="right">
-          {selected ? (
+          {consoleOpen ? (
+            <Console contextItem={selected} onSaved={refresh} onNotice={showNotice} />
+          ) : selected ? (
             <ItemDetail
               item={selected}
               onOpen={setSelectedId}
@@ -322,6 +335,191 @@ function ItemList({
         </li>
       ))}
     </ul>
+  );
+}
+
+interface ChatTurn {
+  role: 'user' | 'assistant';
+  text: string;
+  costUsd?: number;
+  saved?: boolean;
+  failed?: boolean;
+}
+
+const TOOL_MODES: { value: ToolAccess; label: string; hint: string }[] = [
+  { value: 'none', label: '빠름', hint: '도구 없음 · 가장 저렴 (~$0.001/회)' },
+  { value: 'web', label: '웹', hint: '웹 검색·읽기 · ~$0.01–0.03/회' },
+  { value: 'vault', label: '보관소', hint: '보관소 파일 직접 읽기 · ~$0.02/회' },
+];
+
+function Console({
+  contextItem,
+  onSaved,
+  onNotice,
+}: {
+  contextItem: Item | undefined;
+  onSaved: () => Promise<void>;
+  onNotice: (message: string) => void;
+}): React.JSX.Element {
+  const [turns, setTurns] = useState<ChatTurn[]>([]);
+  const [draft, setDraft] = useState('');
+  const [tools, setTools] = useState<ToolAccess>('none');
+  const [useContext, setUseContext] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const sessionRef = useRef<string | undefined>(undefined);
+  const streamIdRef = useRef<string | undefined>(undefined);
+  const endRef = useRef<HTMLDivElement | null>(null);
+
+  // Chunks land here and are appended to the assistant turn in flight.
+  useEffect(
+    () =>
+      window.alexandria.onAskChunk((chunk) => {
+        if (chunk.id !== streamIdRef.current) return;
+        setTurns((current) => {
+          const next = [...current];
+          const last = next[next.length - 1];
+          if (last?.role === 'assistant') next[next.length - 1] = { ...last, text: last.text + chunk.text };
+          return next;
+        });
+      }),
+    [],
+  );
+
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ block: 'end' });
+  }, [turns]);
+
+  const send = async () => {
+    const question = draft.trim();
+    if (!question || busy) return;
+
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    streamIdRef.current = id;
+    setDraft('');
+    setBusy(true);
+    setTurns((current) => [...current, { role: 'user', text: question }, { role: 'assistant', text: '' }]);
+
+    try {
+      const result = await window.alexandria.ask({
+        id,
+        prompt: question,
+        tools,
+        contextIds: useContext && contextItem ? [contextItem.id] : undefined,
+        resume: sessionRef.current,
+      });
+      sessionRef.current = result.sessionId ?? sessionRef.current;
+      setTurns((current) => {
+        const next = [...current];
+        const last = next[next.length - 1];
+        if (last?.role === 'assistant') {
+          // The streamed text can lag the final result; trust the result.
+          next[next.length - 1] = { ...last, text: result.text || last.text, costUsd: result.costUsd };
+        }
+        return next;
+      });
+    } catch (error) {
+      setTurns((current) => {
+        const next = [...current];
+        next[next.length - 1] = { role: 'assistant', text: (error as Error).message, failed: true };
+        return next;
+      });
+    } finally {
+      streamIdRef.current = undefined;
+      setBusy(false);
+    }
+  };
+
+  const save = async (index: number) => {
+    const answer = turns[index];
+    const question = turns[index - 1];
+    if (!answer || !question) return;
+    await window.alexandria.saveAnswer(question.text, answer.text);
+    setTurns((current) => current.map((turn, i) => (i === index ? { ...turn, saved: true } : turn)));
+    onNotice('보관소에 저장했습니다. 정리는 백그라운드에서 진행됩니다.');
+    await onSaved();
+  };
+
+  const total = turns.reduce((sum, turn) => sum + (turn.costUsd ?? 0), 0);
+
+  return (
+    <div className="console">
+      <div className="console-log">
+        {turns.length === 0 ? (
+          <div className="placeholder">
+            <p>모델에게 바로 물어볼 수 있습니다.</p>
+            <p className="dim">
+              보관소 내용을 근거로 답하게 하려면 항목을 연 뒤 &quot;이 항목을 문맥으로&quot;를 켜세요. 웹 모드를
+              쓰면 자료를 찾아오고, 답변은 보관소에 저장해 정리·검색되게 할 수 있습니다.
+            </p>
+          </div>
+        ) : undefined}
+
+        {turns.map((turn, index) => (
+          <div key={index} className={`turn ${turn.role}${turn.failed ? ' failed' : ''}`}>
+            <div className="turn-text">
+              {turn.text || (busy && index === turns.length - 1 ? <span className="thinking">생각 중…</span> : '')}
+            </div>
+            {turn.role === 'assistant' && turn.text && !turn.failed ? (
+              <div className="turn-meta">
+                {turn.costUsd ? <span>${turn.costUsd.toFixed(4)}</span> : undefined}
+                <button className="link" disabled={turn.saved} onClick={() => void save(index)}>
+                  {turn.saved ? '저장됨' : '보관소에 저장'}
+                </button>
+              </div>
+            ) : undefined}
+          </div>
+        ))}
+        <div ref={endRef} />
+      </div>
+
+      <div className="console-input">
+        <div className="console-controls">
+          {TOOL_MODES.map((mode) => (
+            <button
+              key={mode.value}
+              className={tools === mode.value ? 'chip active' : 'chip'}
+              title={mode.hint}
+              onClick={() => setTools(mode.value)}
+            >
+              {mode.label}
+            </button>
+          ))}
+          {contextItem ? (
+            <label className="context-toggle" title={contextItem.title ?? contextItem.id}>
+              <input type="checkbox" checked={useContext} onChange={(e) => setUseContext(e.target.checked)} />이 항목을
+              문맥으로
+            </label>
+          ) : undefined}
+          <span className="spacer" />
+          {total > 0 ? <span className="cost">${total.toFixed(4)}</span> : undefined}
+          {turns.length ? (
+            <button
+              className="link"
+              onClick={() => {
+                setTurns([]);
+                sessionRef.current = undefined;
+              }}
+            >
+              새 대화
+            </button>
+          ) : undefined}
+        </div>
+        <textarea
+          value={draft}
+          placeholder="무엇이든 물어보세요. Ctrl+Enter 로 보냅니다."
+          onChange={(event) => setDraft(event.target.value)}
+          onKeyDown={(event) => {
+            if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') void send();
+          }}
+        />
+        <div className="composer-actions">
+          <span className="hint">{TOOL_MODES.find((mode) => mode.value === tools)?.hint}</span>
+          <button onClick={() => void send()} disabled={!draft.trim() || busy}>
+            {busy ? '답변 중…' : '보내기'}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 

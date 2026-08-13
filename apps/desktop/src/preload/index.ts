@@ -1,6 +1,20 @@
 import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'electron';
-import type { Briefing, Item, ListOptions, PipelineEvent, RelatedHit, SearchHit } from '@alexandria/core';
-import { IPC, type AlexandriaApi, type DoctorCheck, type VaultStats } from '../shared/api.js';
+import type {
+  AskResult,
+  Briefing,
+  Item,
+  ListOptions,
+  PipelineEvent,
+  RelatedHit,
+  SearchHit,
+} from '@alexandria/core';
+import {
+  IPC,
+  type AlexandriaApi,
+  type AskChunk,
+  type DoctorCheck,
+  type VaultStats,
+} from '../shared/api.js';
 
 /**
  * Everything crosses the bridge as plain data. The renderer never sees a
@@ -19,6 +33,10 @@ const api: AlexandriaApi = {
   remove: (id) => ipcRenderer.invoke(IPC.remove, id) as Promise<boolean>,
 
   related: (id, limit) => ipcRenderer.invoke(IPC.related, id, limit) as Promise<RelatedHit[]>,
+
+  ask: (request) => ipcRenderer.invoke(IPC.ask, request) as Promise<AskResult>,
+  saveAnswer: (question, answer) => ipcRenderer.invoke(IPC.saveAnswer, question, answer) as Promise<Item>,
+  onAskChunk: (listener) => subscribe(IPC.askChunk, (_event, payload) => listener(payload as AskChunk)),
   briefing: (soonDays) => ipcRenderer.invoke(IPC.briefing, soonDays) as Promise<Briefing>,
   setTaskDone: (itemId, index, done) =>
     ipcRenderer.invoke(IPC.setTaskDone, itemId, index, done) as Promise<Item | undefined>,

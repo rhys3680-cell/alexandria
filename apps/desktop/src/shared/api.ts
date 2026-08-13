@@ -1,4 +1,29 @@
-import type { Briefing, Item, ListOptions, PipelineEvent, RelatedHit, SearchHit } from '@alexandria/core';
+import type {
+  AskResult,
+  Briefing,
+  Item,
+  ListOptions,
+  PipelineEvent,
+  RelatedHit,
+  SearchHit,
+  ToolAccess,
+} from '@alexandria/core';
+
+export interface AskRequest {
+  /** Correlates streamed chunks with this turn. */
+  id: string;
+  prompt: string;
+  tools: ToolAccess;
+  /** Vault items to place in front of the model. */
+  contextIds?: string[];
+  /** Session id from the previous answer, to continue the conversation. */
+  resume?: string;
+}
+
+export interface AskChunk {
+  id: string;
+  text: string;
+}
 
 export interface VaultStats {
   byStatus: Record<string, number>;
@@ -29,6 +54,12 @@ export interface AlexandriaApi {
   /** Past records connected to this one, with the reason for each link. */
   related(id: string, limit?: number): Promise<RelatedHit[]>;
 
+  /** Sends a turn to the model. Text arrives through `onAskChunk` meanwhile. */
+  ask(request: AskRequest): Promise<AskResult>;
+  saveAnswer(question: string, answer: string): Promise<Item>;
+  /** Returns an unsubscribe function. */
+  onAskChunk(listener: (chunk: AskChunk) => void): () => void;
+
   /** The "먼저 보여주기" view: what needs attention today. */
   briefing(soonDays?: number): Promise<Briefing>;
   setTaskDone(itemId: string, index: number, done: boolean): Promise<Item | undefined>;
@@ -56,6 +87,9 @@ export const IPC = {
   get: 'items:get',
   remove: 'items:remove',
   related: 'items:related',
+  ask: 'ask:send',
+  askChunk: 'ask:chunk',
+  saveAnswer: 'ask:save',
   briefing: 'vault:briefing',
   setTaskDone: 'items:task-done',
   stats: 'vault:stats',

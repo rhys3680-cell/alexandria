@@ -11,7 +11,7 @@ import {
   type ListOptions,
   type PipelineEvent,
 } from '@alexandria/core';
-import { IPC } from '../shared/api.js';
+import { IPC, type AskRequest } from '../shared/api.js';
 
 const isDev = !app.isPackaged;
 
@@ -139,6 +139,29 @@ function registerIpc(): void {
   });
 
   ipcMain.handle(IPC.related, async (_event, id: string, limit?: number) => vault().related(id, limit));
+
+  ipcMain.handle(IPC.ask, async (event, request: AskRequest) => {
+    const context = (request.contextIds ?? [])
+      .map((id) => vault().get(id))
+      .filter((item): item is Item => Boolean(item));
+
+    return vault().ask({
+      prompt: request.prompt,
+      tools: request.tools,
+      context,
+      resume: request.resume,
+      // Streamed back to the window that asked, so a long answer is readable
+      // while it is still being written.
+      onText: (text) => event.sender.send(IPC.askChunk, { id: request.id, text }),
+    });
+  });
+
+  ipcMain.handle(IPC.saveAnswer, async (_event, question: string, answer: string) => {
+    const item = vault().saveAnswer(question, answer);
+    broadcast(IPC.changed);
+    void drainQueue();
+    return item;
+  });
 
   ipcMain.handle(IPC.briefing, async (_event, soonDays?: number) =>
     vault().briefing(soonDays === undefined ? undefined : { soonDays }),
