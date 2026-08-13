@@ -116,6 +116,33 @@ Measured on 5 items and 10 queries mixing Korean, Japanese and English. **The sa
 
 The failures point one way: **a Korean query struggles to reach a non-Korean note.** English queries find Korean notes well on e5-base; the reverse is weak. If cross-lingual retrieval matters to you, switch with `alx setup embeddings -m Xenova/bge-m3`. Changing the model discards the old vectors and re-embeds automatically.
 
+## Conversation console
+
+Talk to the model inside the app. It drives the same `claude` CLI the organize pass uses, so there is no separate authentication.
+
+```bash
+alx ask "summarise what we decided about whisper" --search "whisper benchmark"
+alx ask --tools web --save "what is the latest whisper.cpp release? include the URL"
+```
+
+- **Context injection** — feed in the open item or search results and the answer cites items by their short id.
+- **Save to the vault** — a saved answer becomes an item like any other, so it is organized, tagged and embedded. Something found on the web turns into a searchable record immediately.
+- **Streaming** — the answer appears as it is written.
+
+### Tool level is the cost
+
+Every granted tool ships its schema with each call. Measured on the same question:
+
+| Mode | Input tokens | Per call | What it can do |
+|---|---|---|---|
+| `none` | 190 | $0.0013 | The conversation and given context only |
+| `web` | 1,892 | $0.012–0.033 | Search and read the web |
+| `vault` | 3,240 | ~$0.02 | Read vault files directly |
+
+For comparison, leaving the CLI's full default tool set on costs 26,676 tokens. That is why the mode is the user's choice and defaults to `none`.
+
+Declaring a tool is **not enough**: without an accompanying permission the CLI denies it silently in non-interactive mode and the model replies that it has no web access. The adapter passes `--allowedTools` alongside.
+
 ## Related records
 
 Opening an item shows the past records connected to it, from two independent signals:
@@ -280,7 +307,7 @@ The renderer only sees the narrow API exposed over `contextBridge`. No database 
 pnpm test
 ```
 
-33 tests run against the built artifacts: frontmatter round-trips, filename normalisation, FTS query escaping, cross-lingual search, CJK trigram search, queue retries, task completion reaching the file, briefing due-date bucketing, rank fusion, vector storage, the relatedness floor, the dictionary reaching both whisper and the organize prompt, and the whole capture-to-organized path with the model and embedder stubbed.
+38 tests run against the built artifacts: frontmatter round-trips, filename normalisation, FTS query escaping, cross-lingual search, CJK trigram search, queue retries, task completion reaching the file, briefing due-date bucketing, rank fusion, vector storage, the relatedness floor, the dictionary reaching both whisper and the organize prompt, context injection and session resume for the console, and the whole capture-to-organized path with the model and embedder stubbed.
 
 ## What's next
 
