@@ -5,10 +5,14 @@ import { Command } from 'commander';
 import { watch } from 'chokidar';
 import {
   Alexandria,
+  addTerms,
   DEFAULT_WHISPER_MODEL,
   defaultVaultDir,
   describeError,
+  dictionaryPath,
+  loadDictionary,
   MODEL_NOTES,
+  removeTerms,
   ensureModel,
   ensureWhisperBinary,
   findWhisperBinary,
@@ -375,6 +379,45 @@ program
       const task = updated.tasks[position];
       console.log(`${options.undo ? color.yellow('되돌림') : color.green('완료')}  ${task?.text ?? ''}`);
     });
+  });
+
+// ------------------------------------------------------------------- dict
+
+const dict = program
+  .command('dict')
+  .description('자주 쓰는 이름·용어 사전 (전사 정확도를 크게 올립니다)');
+
+dict
+  .command('list', { isDefault: true })
+  .description('사전을 봅니다')
+  .action(async () => {
+    const vaultDir = loadConfig(vaultOption()).vaultDir;
+    const terms = loadDictionary(vaultDir);
+    if (!terms.length) {
+      console.log(color.dim('사전이 비어 있습니다. `alx dict add <용어...>` 로 추가하세요.'));
+      return;
+    }
+    for (const term of terms) console.log(`  ${term}`);
+    console.log(color.dim(`\n  ${terms.length}개 · ${dictionaryPath(vaultDir)}`));
+  });
+
+dict
+  .command('add <terms...>')
+  .description('용어를 추가합니다')
+  .action(async (terms: string[]) => {
+    const vaultDir = loadConfig(vaultOption()).vaultDir;
+    const all = addTerms(vaultDir, terms);
+    console.log(`${color.green('추가됨')}  ${terms.join(', ')}  ${color.dim(`(총 ${all.length}개)`)}`);
+    console.log(color.dim('다음 전사부터 반영됩니다. 기존 항목은 `alx retry` 로 다시 처리할 수 있습니다.'));
+  });
+
+dict
+  .command('remove <terms...>')
+  .description('용어를 뺍니다')
+  .action(async (terms: string[]) => {
+    const vaultDir = loadConfig(vaultOption()).vaultDir;
+    const all = removeTerms(vaultDir, terms);
+    console.log(`${color.green('삭제됨')}  ${terms.join(', ')}  ${color.dim(`(총 ${all.length}개)`)}`);
   });
 
 // ------------------------------------------------------------- maintenance
