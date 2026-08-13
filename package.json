@@ -5,6 +5,7 @@
   "type": "module",
   "description": "글과 음성을 알아서 정리하고, 찾아주고, 먼저 보여주는 개인용 데스크톱 앱",
   "scripts": {
+    "postinstall": "node scripts/ensure-electron.mjs",
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm --filter @alexandria/core test",

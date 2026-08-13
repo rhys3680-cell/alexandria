@@ -53,3 +53,8 @@ Co-Authored-By: ...
 - **의미 검색은 어휘 검색을 대체하지 않는다.** 둘을 각각 돌리고 순위로 융합한다(RRF). 임베딩 점수는 좁은 대역에 몰려 있어 원점수 혼합은 노이즈에 뒤집힌다. 모델이 없거나 실패하면 조용히 어휘 검색으로 내려간다
 - **정리 호출은 툴 없는 에이전트로 보낸다.** `--agents '{...,"tools":[]}'` + `--agent` + `--effort low`. 이 조합을 벗어나면 호출당 비용이 100배까지 뛴다
 - **원문 언어를 보존한다.** 제목·요약·태그는 원문 언어 그대로, `keywords` 만 영어. 교차 언어 검색이 여기에 의존한다
+
+## 알려진 함정
+
+- **pnpm 이 설치 스크립트를 지운 채 스토어에 넣는다.** 빌드가 허용되기 전에 추출된 패키지는 `scripts` 가 `null` 로 남고, 나중에 `allowBuilds` 를 켜도 `pnpm rebuild` 가 실행할 것이 없다. electron 이 이 문제로 바이너리 없이 설치되어 `pnpm desktop` 이 `Error: Electron uninstall` 로 죽었다. 루트 `postinstall` 의 `scripts/ensure-electron.mjs` 가 매 설치마다 복구한다
+- **패키징이 성공해도 dev 가 동작한다는 뜻은 아니다.** electron-builder 는 자체 캐시로 Electron 을 따로 받으므로 `node_modules/electron` 이 비어 있어도 설치본은 만들어진다. 둘을 각각 확인한다
