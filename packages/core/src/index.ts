@@ -1,6 +1,7 @@
 export * from './briefing.js';
 export * from './config.js';
 export * from './db.js';
+export * from './dictionary.js';
 export * from './frontmatter.js';
 export * from './ids.js';
 export * from './jobs.js';

@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { buildBriefing, type Briefing, type BriefingOptions } from './briefing.js';
 import { loadConfig, vendorDir, type AlexandriaConfig } from './config.js';
+import { buildWhisperPrompt, loadDictionary } from './dictionary.js';
 import { openDatabase, type Database } from './db.js';
 import { newId } from './ids.js';
 import {
@@ -266,7 +267,10 @@ export class Alexandria {
     const working = this.vault.writeItem({ ...item, status: 'transcribing', updated: nowIso() });
     store.upsertItem(this.db, working);
 
-    const result = await this.transcriber.transcribe(this.vault.absolute(item.media));
+    const prompt = buildWhisperPrompt(this.dictionary());
+    const result = await this.transcriber.transcribe(this.vault.absolute(item.media), {
+      prompt: prompt || undefined,
+    });
     if (!result.text.trim()) throw new Error('전사 결과가 비어 있습니다. 무음이거나 인식에 실패했습니다.');
 
     const transcribed = this.vault.writeItem({
@@ -294,6 +298,7 @@ export class Alexandria {
       source: working.source,
       sourceRef: working.sourceRef,
       languageHint: working.lang,
+      dictionary: this.dictionary(),
     });
 
     // The filename is derived from the title, which only exists now — so this
@@ -452,6 +457,14 @@ export class Alexandria {
 
   tags(limit?: number): { tag: string; count: number }[] {
     return store.allTags(this.db, limit);
+  }
+
+  /**
+   * The user's terms, read fresh each time: the file is meant to be edited by
+   * hand while the app is running.
+   */
+  dictionary(): string[] {
+    return loadDictionary(this.config.vaultDir);
   }
 
   briefing(options?: BriefingOptions): Briefing {

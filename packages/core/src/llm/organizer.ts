@@ -43,6 +43,8 @@ export interface OrganizeInput {
   sourceRef?: string;
   /** Language detected by the transcriber, used as a hint only. */
   languageHint?: string;
+  /** The user's own names and terms, for repairing misheard spellings. */
+  dictionary?: string[];
 }
 
 export function buildOrganizePrompt(input: OrganizeInput): string {
@@ -57,7 +59,14 @@ export function buildOrganizePrompt(input: OrganizeInput): string {
     .filter(Boolean)
     .join('\n');
 
-  return `${header}\n\n--- CONTENT ---\n${truncated.text}\n--- END CONTENT ---\n\nReturn the JSON object now.`;
+  // Placed after the content so the model reads it as a correction pass over
+  // what it just saw, not as a topic to write about.
+  const glossary = input.dictionary?.length
+    ? `\n\n--- KNOWN TERMS ---\n${input.dictionary.join(', ')}\n` +
+      'These are the author\'s own names, products and jargon. Where the content contains something that is clearly a misheard rendering of one of them, use the correct form in the fields you produce. Leave "highlights" quoted verbatim from the content, uncorrected. Do not force a term in where the content does not support it.'
+    : '';
+
+  return `${header}\n\n--- CONTENT ---\n${truncated.text}\n--- END CONTENT ---${glossary}\n\nReturn the JSON object now.`;
 }
 
 export interface OrganizeOutcome {

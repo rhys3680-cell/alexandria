@@ -6,10 +6,15 @@ import type { SttConfig } from '../config.js';
 import { resolveCommand, run } from '../proc.js';
 import type { TranscriptionResult, TranscriptSegment } from '../types.js';
 
+export interface TranscribeOptions {
+  /** Terms to bias recognition toward — names, products, jargon. */
+  prompt?: string;
+}
+
 export interface Transcriber {
   readonly name: string;
   check(): Promise<string | null>;
-  transcribe(audioPath: string): Promise<TranscriptionResult>;
+  transcribe(audioPath: string, options?: TranscribeOptions): Promise<TranscriptionResult>;
 }
 
 export class TranscriptionError extends Error {
@@ -55,7 +60,7 @@ export class WhisperCppTranscriber implements Transcriber {
     return null;
   }
 
-  async transcribe(audioPath: string): Promise<TranscriptionResult> {
+  async transcribe(audioPath: string, options: TranscribeOptions = {}): Promise<TranscriptionResult> {
     const problem = await this.check();
     if (problem) throw new TranscriptionError(problem);
 
@@ -87,6 +92,12 @@ export class WhisperCppTranscriber implements Transcriber {
         args.push('-l', 'auto');
       }
       if (this.config.threads) args.push('-t', String(this.config.threads));
+      if (options.prompt) {
+        // Biases decoding toward the user's own names and terms. Measured to
+        // matter more than a model size step: on a Korean memo it took `base`
+        // from six errors to one.
+        args.push('--prompt', options.prompt);
+      }
 
       const result = await run(whisper.file, args, { timeoutMs: 60 * 60 * 1000 });
       if (result.code !== 0) {
